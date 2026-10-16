@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import './style.css';
 import { createPlayer, updatePlayer } from './components/Player.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
+import { createAttack, updateAttack } from './components/Attack.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
@@ -31,12 +32,19 @@ const player = createPlayer();
 player.add(camera);
 scene.add(player);
 
+createAttack(player);
+
 const enemies = [];
 
 function spawnEnemy(position) {
   const enemy = createEnemy(position);
   enemies.push(enemy);
   scene.add(enemy);
+}
+
+function removeEnemy(enemy) {
+  scene.remove(enemy);
+  enemies.splice(enemies.indexOf(enemy), 1);
 }
 
 SPAWN_POINTS.forEach((point) => spawnEnemy(point));
@@ -49,6 +57,11 @@ renderer.setAnimationLoop(() => {
   const delta = Math.min(clock.getDelta(), MAX_DELTA);
 
   updatePlayer(player, delta, enemies);
+
+  // Remove defeated enemies after collecting them, so the array isn't changed while it's iterated
+  for (const enemy of updateAttack(player, enemies, delta)) {
+    removeEnemy(enemy);
+  }
 
   spawnTimer += delta;
   if (spawnTimer >= SPAWN_DELAY) {
