@@ -2,3 +2,15 @@ body {
   margin: 0;
   overflow: hidden;
 }
+
+.score {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font: bold 28px sans-serif;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  user-select: none;
+}

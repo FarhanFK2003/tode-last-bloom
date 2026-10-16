@@ -3,6 +3,7 @@ import './style.css';
 import { createPlayer, updatePlayer } from './components/Player.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
 import { createAttack, updateAttack } from './components/Attack.js';
+import { createScore, updateScore } from './components/Score.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
@@ -33,6 +34,7 @@ player.add(camera);
 scene.add(player);
 
 createAttack(player);
+createScore();
 
 const enemies = [];
 
@@ -59,9 +61,13 @@ renderer.setAnimationLoop(() => {
   updatePlayer(player, delta, enemies);
 
   // Remove defeated enemies after collecting them, so the array isn't changed while it's iterated
-  for (const enemy of updateAttack(player, enemies, delta)) {
+  const defeated = updateAttack(player, enemies, delta);
+  for (const enemy of defeated) {
     removeEnemy(enemy);
   }
+
+  // Only enemies defeated by the attack earn kill points
+  updateScore(delta, defeated.length);
 
   spawnTimer += delta;
   if (spawnTimer >= SPAWN_DELAY) {
