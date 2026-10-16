@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Environment files (may contain secrets)
+.env
+.env.*
+!.env.example
+
+# Logs and caches
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.cache/
+.vite/
+.eslintcache
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# JetBrains: local EduTools storage (workspace.xml etc. are handled by .idea/.gitignore)
+.idea/.author_contents_storage_db*
+node_modules
