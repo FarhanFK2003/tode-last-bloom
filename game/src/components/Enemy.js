@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { blocksMove, computeCollisionRadius, isMoveBlocked } from '../collision.js';
+import { blocksMove, computeCollisionRadius, hitsObstacle, isMoveBlocked } from '../collision.js';
 
 const MODEL_PATH = '/models/enemy.glb';
 const MODEL_SCALE = 5;
@@ -53,7 +53,7 @@ const toTarget = new THREE.Vector2();
 
 // Returns true when the enemy's next step runs into the player (or it already sits on the player).
 // speedScale multiplies ENEMY_SPEED as difficulty increases.
-export function updateEnemy(enemy, player, delta, enemies, speedScale) {
+export function updateEnemy(enemy, player, delta, enemies, houses, speedScale) {
   toTarget.set(player.position.x - enemy.position.x, player.position.y - enemy.position.y);
   const distance = toTarget.length();
   if (distance === 0) return true;
@@ -63,16 +63,32 @@ export function updateEnemy(enemy, player, delta, enemies, speedScale) {
 
   // Never step further than the remaining distance, so enemies don't overshoot
   const step = Math.min(ENEMY_SPEED * speedScale * delta, distance);
-  const nextX = enemy.position.x + (toTarget.x / distance) * step;
-  const nextY = enemy.position.y + (toTarget.y / distance) * step;
+  const stepX = (toTarget.x / distance) * step;
+  const stepY = (toTarget.y / distance) * step;
 
-  // Running into the player is reported first, so Game Over takes priority over blocking
-  if (blocksMove(enemy, nextX, nextY, player)) return true;
+  // Try the direct step first; if a house is in the way, slide along its wall one axis at a time
+  const candidates = [
+    [stepX, stepY],
+    [Math.sign(stepX) * step, 0],
+    [0, Math.sign(stepY) * step],
+  ];
 
-  // A blocked enemy stays where it is this frame
-  if (isMoveBlocked(enemy, nextX, nextY, enemies)) return false;
+  for (const [dx, dy] of candidates) {
+    if (dx === 0 && dy === 0) continue;
+    const nextX = enemy.position.x + dx;
+    const nextY = enemy.position.y + dy;
+    if (hitsObstacle(enemy, nextX, nextY, houses)) continue;
 
-  enemy.position.x = nextX;
-  enemy.position.y = nextY;
+    // Running into the player is reported first, so Game Over takes priority over blocking
+    if (blocksMove(enemy, nextX, nextY, player)) return true;
+
+    // A blocked enemy stays where it is this frame
+    if (isMoveBlocked(enemy, nextX, nextY, enemies)) return false;
+
+    enemy.position.x = nextX;
+    enemy.position.y = nextY;
+    return false;
+  }
+
   return false;
 }

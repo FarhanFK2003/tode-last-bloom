@@ -5,10 +5,13 @@ import { createEnemy, updateEnemy } from './components/Enemy.js';
 import { createAttack, resetAttack, updateAttack } from './components/Attack.js';
 import { createScore, getScore, resetScore, updateScore } from './components/Score.js';
 import { createGameOver, hideGameOver, showGameOver } from './components/GameOver.js';
+import { createMap } from './components/Map.js';
+import { createHouses } from './components/House.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
 const MAP_SIZE = 500;
+const TILE_SIZE = 20;
 const SPAWN_POINTS = [
   new THREE.Vector2(-MAP_SIZE / 2, -MAP_SIZE / 2),
   new THREE.Vector2(MAP_SIZE / 2, -MAP_SIZE / 2),
@@ -34,9 +37,15 @@ scene.add(directionalLight);
 const renderer = createRenderer();
 const camera = createCamera();
 
+const map = createMap(MAP_SIZE, TILE_SIZE);
+scene.add(map);
+
 const player = createPlayer();
 player.add(camera);
 scene.add(player);
+
+// Houses keep clear of Tode's start, his current spot, and the enemy spawn corners
+const houses = createHouses(map, MAP_SIZE, [new THREE.Vector2(0, 0), player.position, ...SPAWN_POINTS]);
 
 createAttack(player);
 createScore();
@@ -99,7 +108,7 @@ function updateGame(delta) {
   const enemyScale = 1 + difficulty;
   const playerScale = 1 + difficulty * PLAYER_SCALING_RATIO;
 
-  if (updatePlayer(player, delta, enemies, playerScale)) return true;
+  if (updatePlayer(player, delta, enemies, houses, playerScale)) return true;
 
   // Remove defeated enemies after collecting them, so the array isn't changed while it's iterated
   const defeated = updateAttack(player, enemies, delta, playerScale);
@@ -119,7 +128,7 @@ function updateGame(delta) {
   }
 
   for (const enemy of enemies) {
-    if (updateEnemy(enemy, player, delta, enemies, enemyScale)) return true;
+    if (updateEnemy(enemy, player, delta, enemies, houses, enemyScale)) return true;
   }
 
   return false;

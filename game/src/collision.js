@@ -44,3 +44,23 @@ export function blocksMove(entity, nextX, nextY, other) {
 export function isMoveBlocked(entity, nextX, nextY, others) {
   return others.some((other) => blocksMove(entity, nextX, nextY, other));
 }
+
+const point = new THREE.Vector2();
+
+function distanceToFootprint(footprint, x, y) {
+  return footprint.distanceToPoint(point.set(x, y));
+}
+
+// Whether moving `entity` to (nextX, nextY) runs into an obstacle's rectangular footprint
+// (`userData.footprint`, a Box2 on the ground). As with characters, a move away from an
+// obstacle it already overlaps is allowed.
+export function hitsObstacle(entity, nextX, nextY, obstacles) {
+  const minDistance = (entity.userData.collisionRadius ?? 0) + COLLISION_DISTANCE;
+
+  return obstacles.some((obstacle) => {
+    const footprint = obstacle.userData.footprint;
+    const nextDistance = distanceToFootprint(footprint, nextX, nextY);
+    if (nextDistance >= minDistance) return false;
+    return nextDistance <= distanceToFootprint(footprint, entity.position.x, entity.position.y);
+  });
+}

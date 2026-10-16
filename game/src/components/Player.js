@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { computeCollisionRadius, isMoveBlocked } from '../collision.js';
+import { computeCollisionRadius, hitsObstacle, isMoveBlocked } from '../collision.js';
 
 const MODEL_PATH = '/models/tode.glb';
 const MODEL_SCALE = 20;
@@ -63,9 +63,9 @@ export function createPlayer(onLoad) {
   return player;
 }
 
-// Returns true when Tode's next position runs into an enemy.
+// Returns true when Tode's next position runs into an enemy. Houses only block the hop.
 // speedScale multiplies MOVE_SPEED as difficulty increases.
-export function updatePlayer(player, delta, enemies, speedScale) {
+export function updatePlayer(player, delta, enemies, houses, speedScale) {
   if (movement.done && inputQueue.length > 0) {
     movement.direction = inputQueue.shift();
     movement.progress = 0;
@@ -93,6 +93,9 @@ export function updatePlayer(player, delta, enemies, speedScale) {
     if (isMoveBlocked(player, nextX, nextY, enemies)) {
       movement.blocked = true;
       touchedEnemy = true;
+    } else if (hitsObstacle(player, nextX, nextY, houses)) {
+      // A house stops the hop but never ends the game
+      movement.blocked = true;
     } else {
       player.position.x = nextX;
       player.position.y = nextY;
