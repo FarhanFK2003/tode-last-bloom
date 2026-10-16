@@ -63,6 +63,7 @@ export function createPlayer(onLoad) {
   return player;
 }
 
+// Returns true when Tode's next position runs into an enemy
 export function updatePlayer(player, delta, enemies) {
   if (movement.done && inputQueue.length > 0) {
     movement.direction = inputQueue.shift();
@@ -77,9 +78,11 @@ export function updatePlayer(player, delta, enemies) {
     }
   }
 
-  if (movement.done) return;
+  if (movement.done) return false;
 
   movement.progress = Math.min(movement.progress + MOVE_SPEED * delta, 1);
+  let touchedEnemy = false;
+
   // Once a hop bumps into an enemy, it stops moving forward but still finishes its arc
   if (!movement.blocked) {
     const distance = JUMP_DISTANCE * movement.progress;
@@ -88,6 +91,7 @@ export function updatePlayer(player, delta, enemies) {
 
     if (isMoveBlocked(player, nextX, nextY, enemies)) {
       movement.blocked = true;
+      touchedEnemy = true;
     } else {
       player.position.x = nextX;
       player.position.y = nextY;
@@ -101,5 +105,23 @@ export function updatePlayer(player, delta, enemies) {
 
   if (movement.progress === 1) {
     movement.done = true;
+  }
+
+  return touchedEnemy;
+}
+
+export function resetPlayer(player) {
+  inputQueue.length = 0;
+  movement.direction = null;
+  movement.progress = 0;
+  movement.done = true;
+  movement.blocked = false;
+
+  player.position.set(0, 0, 0);
+  player.visible = true;
+
+  if (model) {
+    model.position.z = modelGroundZ;
+    model.rotation.y = 0;
   }
 }

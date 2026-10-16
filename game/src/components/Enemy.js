@@ -51,10 +51,11 @@ export function createEnemy(position) {
 
 const toTarget = new THREE.Vector2();
 
+// Returns true when the enemy's next step runs into the player (or it already sits on the player)
 export function updateEnemy(enemy, player, delta, enemies) {
   toTarget.set(player.position.x - enemy.position.x, player.position.y - enemy.position.y);
   const distance = toTarget.length();
-  if (distance === 0) return;
+  if (distance === 0) return true;
 
   // The model faces -Y by default; rotate the group around the world Z axis
   enemy.rotation.z = Math.atan2(toTarget.x, -toTarget.y);
@@ -64,9 +65,13 @@ export function updateEnemy(enemy, player, delta, enemies) {
   const nextX = enemy.position.x + (toTarget.x / distance) * step;
   const nextY = enemy.position.y + (toTarget.y / distance) * step;
 
+  // Running into the player is reported first, so Game Over takes priority over blocking
+  if (blocksMove(enemy, nextX, nextY, player)) return true;
+
   // A blocked enemy stays where it is this frame
-  if (isMoveBlocked(enemy, nextX, nextY, enemies) || blocksMove(enemy, nextX, nextY, player)) return;
+  if (isMoveBlocked(enemy, nextX, nextY, enemies)) return false;
 
   enemy.position.x = nextX;
   enemy.position.y = nextY;
+  return false;
 }

@@ -58,3 +58,11 @@ export function updateAttack(player, enemies, delta) {
 
   return defeated;
 }
+
+export function resetAttack() {
+  attackRequested = false;
+  cooldown = 0;
+  visualTimeLeft = 0;
+  circle.visible = false;
+  circle.material.opacity = 0;
+}

@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import './style.css';
-import { createPlayer, updatePlayer } from './components/Player.js';
+import { createPlayer, resetPlayer, updatePlayer } from './components/Player.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
-import { createAttack, updateAttack } from './components/Attack.js';
-import { createScore, updateScore } from './components/Score.js';
+import { createAttack, resetAttack, updateAttack } from './components/Attack.js';
+import { createScore, resetScore, updateScore } from './components/Score.js';
+import { createGameOver, hideGameOver, showGameOver } from './components/GameOver.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
@@ -35,6 +36,7 @@ scene.add(player);
 
 createAttack(player);
 createScore();
+createGameOver();
 
 const enemies = [];
 
@@ -52,13 +54,43 @@ function removeEnemy(enemy) {
 SPAWN_POINTS.forEach((point) => spawnEnemy(point));
 let spawnTimer = 0;
 
-const clock = new THREE.Clock();
+let gameOver = false;
+let resetRequested = false;
 
-renderer.setAnimationLoop(() => {
-  // Read delta once per frame and share it with every system that needs it
-  const delta = Math.min(clock.getDelta(), MAX_DELTA);
+// Space attacks while playing (handled in Attack.js); after Game Over it restarts the game.
+// The reset itself runs in the animation loop, which also clears the attack this press requested.
+window.addEventListener('keydown', (event) => {
+  if (event.code !== 'Space' || event.repeat || !gameOver) return;
+  resetRequested = true;
+});
 
-  updatePlayer(player, delta, enemies);
+function triggerGameOver() {
+  gameOver = true;
+  player.visible = false;
+  showGameOver();
+}
+
+function resetGame() {
+  for (const enemy of enemies) {
+    scene.remove(enemy);
+  }
+  enemies.length = 0;
+  SPAWN_POINTS.forEach((point) => spawnEnemy(point));
+  spawnTimer = 0;
+
+  resetPlayer(player);
+  resetAttack();
+  resetScore();
+  hideGameOver();
+
+  gameOver = false;
+  resetRequested = false;
+}
+
+// Returns true as soon as Tode and an enemy run into each other;
+// Game Over then takes priority over everything else in the frame
+function updateGame(delta) {
+  if (updatePlayer(player, delta, enemies)) return true;
 
   // Remove defeated enemies after collecting them, so the array isn't changed while it's iterated
   const defeated = updateAttack(player, enemies, delta);
@@ -76,7 +108,23 @@ renderer.setAnimationLoop(() => {
   }
 
   for (const enemy of enemies) {
-    updateEnemy(enemy, player, delta, enemies);
+    if (updateEnemy(enemy, player, delta, enemies)) return true;
+  }
+
+  return false;
+}
+
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  // Read delta once per frame and share it with every system that needs it
+  const delta = Math.min(clock.getDelta(), MAX_DELTA);
+
+  // While the game is over, nothing updates, but the frozen scene keeps rendering
+  if (gameOver) {
+    if (resetRequested) resetGame();
+  } else if (updateGame(delta)) {
+    triggerGameOver();
   }
 
   renderer.render(scene, camera);

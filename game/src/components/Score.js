@@ -18,6 +18,11 @@ export function updateScore(delta, kills) {
   render();
 }
 
+export function resetScore() {
+  score = 0;
+  render();
+}
+
 function render() {
   const roundedScore = Math.floor(score);
   // The score grows a little every frame; only touch the page when the shown number changes
