@@ -48,7 +48,7 @@ renderer.setAnimationLoop(() => {
   // Read delta once per frame and share it with every system that needs it
   const delta = Math.min(clock.getDelta(), MAX_DELTA);
 
-  updatePlayer(player, delta);
+  updatePlayer(player, delta, enemies);
 
   spawnTimer += delta;
   if (spawnTimer >= SPAWN_DELAY) {
@@ -57,7 +57,7 @@ renderer.setAnimationLoop(() => {
   }
 
   for (const enemy of enemies) {
-    updateEnemy(enemy, player.position, delta);
+    updateEnemy(enemy, player, delta, enemies);
   }
 
   renderer.render(scene, camera);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { computeCollisionRadius, isMoveBlocked } from '../collision.js';
 
 const MODEL_PATH = '/models/tode.glb';
 const MODEL_SCALE = 20;
@@ -21,6 +22,7 @@ const movement = {
   direction: null,
   progress: 0,
   done: true,
+  blocked: false,
   start: new THREE.Vector2(),
 };
 
@@ -43,6 +45,7 @@ export function createPlayer(onLoad) {
       model.position.z -= box.min.z;
       modelGroundZ = model.position.z;
 
+      player.userData.collisionRadius = computeCollisionRadius(model);
       player.add(model);
       onLoad?.();
     },
@@ -60,11 +63,12 @@ export function createPlayer(onLoad) {
   return player;
 }
 
-export function updatePlayer(player, delta) {
+export function updatePlayer(player, delta, enemies) {
   if (movement.done && inputQueue.length > 0) {
     movement.direction = inputQueue.shift();
     movement.progress = 0;
     movement.done = false;
+    movement.blocked = false;
     movement.start.set(player.position.x, player.position.y);
 
     // The model faces -Y by default; rotation.y turns it around the world Z axis
@@ -76,9 +80,19 @@ export function updatePlayer(player, delta) {
   if (movement.done) return;
 
   movement.progress = Math.min(movement.progress + MOVE_SPEED * delta, 1);
-  const distance = JUMP_DISTANCE * movement.progress;
-  player.position.x = movement.start.x + movement.direction.x * distance;
-  player.position.y = movement.start.y + movement.direction.y * distance;
+  // Once a hop bumps into an enemy, it stops moving forward but still finishes its arc
+  if (!movement.blocked) {
+    const distance = JUMP_DISTANCE * movement.progress;
+    const nextX = movement.start.x + movement.direction.x * distance;
+    const nextY = movement.start.y + movement.direction.y * distance;
+
+    if (isMoveBlocked(player, nextX, nextY, enemies)) {
+      movement.blocked = true;
+    } else {
+      player.position.x = nextX;
+      player.position.y = nextY;
+    }
+  }
 
   // Hop the model, not the group, so the attached camera stays steady
   if (model) {
