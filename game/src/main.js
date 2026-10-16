@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
-import { createPlayer } from './components/Player.js';
+import { createPlayer, updatePlayer } from './components/Player.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
@@ -16,7 +16,17 @@ scene.add(directionalLight);
 const renderer = createRenderer();
 const camera = createCamera();
 
-// The model loads asynchronously, so render once Tode is in the scene
-const player = createPlayer(() => renderer.render(scene, camera));
+const player = createPlayer();
 player.add(camera);
 scene.add(player);
+
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  // Read delta once per frame and share it with every system that needs it
+  const delta = clock.getDelta();
+
+  updatePlayer(player, delta);
+
+  renderer.render(scene, camera);
+});
