@@ -51,8 +51,9 @@ export function createEnemy(position) {
 
 const toTarget = new THREE.Vector2();
 
-// Returns true when the enemy's next step runs into the player (or it already sits on the player)
-export function updateEnemy(enemy, player, delta, enemies) {
+// Returns true when the enemy's next step runs into the player (or it already sits on the player).
+// speedScale multiplies ENEMY_SPEED as difficulty increases.
+export function updateEnemy(enemy, player, delta, enemies, speedScale) {
   toTarget.set(player.position.x - enemy.position.x, player.position.y - enemy.position.y);
   const distance = toTarget.length();
   if (distance === 0) return true;
@@ -61,7 +62,7 @@ export function updateEnemy(enemy, player, delta, enemies) {
   enemy.rotation.z = Math.atan2(toTarget.x, -toTarget.y);
 
   // Never step further than the remaining distance, so enemies don't overshoot
-  const step = Math.min(ENEMY_SPEED * delta, distance);
+  const step = Math.min(ENEMY_SPEED * speedScale * delta, distance);
   const nextX = enemy.position.x + (toTarget.x / distance) * step;
   const nextY = enemy.position.y + (toTarget.y / distance) * step;
 

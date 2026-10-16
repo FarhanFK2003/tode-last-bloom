@@ -63,8 +63,9 @@ export function createPlayer(onLoad) {
   return player;
 }
 
-// Returns true when Tode's next position runs into an enemy
-export function updatePlayer(player, delta, enemies) {
+// Returns true when Tode's next position runs into an enemy.
+// speedScale multiplies MOVE_SPEED as difficulty increases.
+export function updatePlayer(player, delta, enemies, speedScale) {
   if (movement.done && inputQueue.length > 0) {
     movement.direction = inputQueue.shift();
     movement.progress = 0;
@@ -80,7 +81,7 @@ export function updatePlayer(player, delta, enemies) {
 
   if (movement.done) return false;
 
-  movement.progress = Math.min(movement.progress + MOVE_SPEED * delta, 1);
+  movement.progress = Math.min(movement.progress + MOVE_SPEED * speedScale * delta, 1);
   let touchedEnemy = false;
 
   // Once a hop bumps into an enemy, it stops moving forward but still finishes its arc

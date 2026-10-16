@@ -31,11 +31,13 @@ export function createAttack(player) {
   });
 }
 
-// Returns the enemies defeated this frame; the caller removes them from the scene and the array
-export function updateAttack(player, enemies, delta) {
+// Returns the enemies defeated this frame; the caller removes them from the scene and the array.
+// scale grows the attack radius and shortens the cooldown as difficulty increases.
+export function updateAttack(player, enemies, delta, scale) {
   cooldown = Math.max(cooldown - delta, 0);
   visualTimeLeft = Math.max(visualTimeLeft - delta, 0);
 
+  const radius = ATTACK_RADIUS * scale;
   const defeated = [];
 
   // Presses during the cooldown are ignored, not saved for later
@@ -43,14 +45,17 @@ export function updateAttack(player, enemies, delta) {
     for (const enemy of enemies) {
       const distance = Math.hypot(enemy.position.x - player.position.x, enemy.position.y - player.position.y);
       // An enemy is hit when its collision footprint touches the attack area
-      if (distance <= ATTACK_RADIUS + (enemy.userData.collisionRadius ?? 0)) {
+      if (distance <= radius + (enemy.userData.collisionRadius ?? 0)) {
         defeated.push(enemy);
       }
     }
-    cooldown = ATTACK_COOLDOWN;
+    cooldown = ATTACK_COOLDOWN / scale;
     visualTimeLeft = ATTACK_VISUAL_DURATION;
   }
   attackRequested = false;
+
+  // The geometry is built at ATTACK_RADIUS; scale it in the ground plane to match the current reach
+  circle.scale.set(scale, scale, 1);
 
   // Fade the circle out over its display time, then hide it
   circle.visible = visualTimeLeft > 0;

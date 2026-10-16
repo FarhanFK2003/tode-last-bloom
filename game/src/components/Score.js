@@ -18,6 +18,11 @@ export function updateScore(delta, kills) {
   render();
 }
 
+// The raw (unrounded) score, so difficulty can grow smoothly
+export function getScore() {
+  return score;
+}
+
 export function resetScore() {
   score = 0;
   render();

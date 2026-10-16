@@ -3,7 +3,7 @@ import './style.css';
 import { createPlayer, resetPlayer, updatePlayer } from './components/Player.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
 import { createAttack, resetAttack, updateAttack } from './components/Attack.js';
-import { createScore, resetScore, updateScore } from './components/Score.js';
+import { createScore, getScore, resetScore, updateScore } from './components/Score.js';
 import { createGameOver, hideGameOver, showGameOver } from './components/GameOver.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
@@ -17,6 +17,10 @@ const SPAWN_POINTS = [
 ];
 const SPAWN_DELAY = 3; // seconds
 const MAX_DELTA = 0.1; // seconds; avoids huge jumps after the tab was hidden
+
+const DIFFICULTY_GROWTH_RATE = 0.005; // difficulty gained per score point
+const MAX_DIFFICULTY = 2; // enemies reach x3, the player x2
+const PLAYER_SCALING_RATIO = 0.5; // player parameters grow at half the enemy rate
 
 const scene = new THREE.Scene();
 
@@ -90,10 +94,15 @@ function resetGame() {
 // Returns true as soon as Tode and an enemy run into each other;
 // Game Over then takes priority over everything else in the frame
 function updateGame(delta) {
-  if (updatePlayer(player, delta, enemies)) return true;
+  // Difficulty grows linearly with the score; enemy parameters scale faster than the player's
+  const difficulty = Math.min(getScore() * DIFFICULTY_GROWTH_RATE, MAX_DIFFICULTY);
+  const enemyScale = 1 + difficulty;
+  const playerScale = 1 + difficulty * PLAYER_SCALING_RATIO;
+
+  if (updatePlayer(player, delta, enemies, playerScale)) return true;
 
   // Remove defeated enemies after collecting them, so the array isn't changed while it's iterated
-  const defeated = updateAttack(player, enemies, delta);
+  const defeated = updateAttack(player, enemies, delta, playerScale);
   for (const enemy of defeated) {
     removeEnemy(enemy);
   }
@@ -101,14 +110,16 @@ function updateGame(delta) {
   // Only enemies defeated by the attack earn kill points
   updateScore(delta, defeated.length);
 
+  // Spawning uses a timer accumulated from the shared delta; enemies appear more often as difficulty grows
+  const spawnDelay = SPAWN_DELAY / enemyScale;
   spawnTimer += delta;
-  if (spawnTimer >= SPAWN_DELAY) {
-    spawnTimer -= SPAWN_DELAY;
+  if (spawnTimer >= spawnDelay) {
+    spawnTimer -= spawnDelay;
     spawnEnemy(SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)]);
   }
 
   for (const enemy of enemies) {
-    if (updateEnemy(enemy, player, delta, enemies)) return true;
+    if (updateEnemy(enemy, player, delta, enemies, enemyScale)) return true;
   }
 
   return false;
