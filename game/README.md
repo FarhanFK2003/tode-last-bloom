@@ -26,6 +26,8 @@ caught yourself.
   is kept.
 - **Defeat:** `DEFEAT / The flower wilted` when the flower reaches 0 HP, or `DEFEAT / Tode was caught` when he
   loses his last life. Tode is hidden.
+- **The flower shows its state:** it flashes red and flinches on every bite, wilts toward brown as it loses
+  health, and glows more warmly the longer you hold out (see [Flower appearance](#flower-appearance)).
 - When the game ends, everything freezes and the HUD keeps its final values. Press Space to play again.
 
 ### HUD
@@ -63,7 +65,7 @@ part of the game and is wired together by `main.js`; components do not import ea
 | `src/collision.js` | Collision radius from model vertices; circle-vs-circle and circle-vs-rectangle move checks; sliding around obstacles | `COLLISION_DISTANCE`, `computeCollisionRadius`, `blocksMove`, `isMoveBlocked`, `hitsObstacle`, `slideAlongObstacle` |
 | `components/Renderer.js` | `WebGLRenderer` on `canvas.game` (transparent, antialiased, window-sized) | `createRenderer` |
 | `components/Camera.js` | Perspective camera, Z-up, looking at the origin | `createCamera` |
-| `components/Flower.js` | Flower model at the origin and its health | `FLOWER_MAX_HEALTH`, `createFlower`, `damageFlower`, `getFlowerHealth`, `resetFlower` |
+| `components/Flower.js` | Flower model at the origin, its health, and its hit flash, wilt and bloom | `FLOWER_MAX_HEALTH`, `createFlower`, `damageFlower`, `getFlowerHealth`, `updateFlower`, `resetFlower` |
 | `components/Player.js` | Tode model, arrow-key queue, hop movement, player collision, lives and invulnerability | `PLAYER_START`, `PLAYER_LIVES`, `createPlayer`, `updatePlayer`, `hitPlayer`, `getPlayerLives`, `showPlayerModel`, `resetPlayer` |
 | `components/Enemy.js` | Bee model (loaded once, cloned per bee), flying to the flower, biting, enemy collision | `createEnemy`, `updateEnemy` |
 | `components/Attack.js` | Space input, cooldown, fading yellow circle, hit test | `createAttack`, `updateAttack`, `resetAttack` |
@@ -103,9 +105,11 @@ so the game runs while models load.
    leaves 0 HP. Victory (`'won'`) is checked last, when the timer reaches 0, so a defeat in the same frame wins.
    `triggerGameOver(outcome)` freezes the game, shows that outcome's end screen, and hides Tode on defeat (on
    victory it keeps him visible and stops his blinking).
-4. **HUD:** `updateHud` runs every frame, including after the game ends, and only rewrites the page when a shown
+4. **Flower appearance:** `updateFlower(delta, progress)` runs every frame, including after the game ends. It is
+   visual only, so a hit flash can finish and the final wilt or bloom stays on the end screen.
+5. **HUD:** `updateHud` runs every frame, including after the game ends, and only rewrites the page when a shown
    value changes.
-5. **Render:** `renderer.render(scene, camera)` runs every frame, including after the game ends.
+6. **Render:** `renderer.render(scene, camera)` runs every frame, including after the game ends.
 
 ## Coordinate system and camera
 
@@ -168,6 +172,27 @@ also blocked, the bee falls back to the same step along X only, then Y only.
   by `updateAttack`, not from enemy removal. The display shows `Score: N`, rounded down, and is only rewritten when
   that whole number changes.
 
+## Flower appearance
+
+The flower model has two materials, `Leaves` and `Flowers` (the heads). When the model loads, `Flower.js` stores
+each material's original colour and glow (emissive), and every frame `updateFlower` rebuilds the look from those
+originals, so the effects never build up and can always be undone exactly.
+
+| Effect | Trigger | What you see |
+|---|---|---|
+| **Hit flash** | Every bite (`damageFlower`) | Both materials glow red and the model squashes to 90 % of its height, both easing back over `FLASH_DURATION` (0.25 s) |
+| **Wilt** | Lost health (`1 − health / 20`) | Both materials tint from their texture colours toward `WILT_COLOR` (`#8a7a5a`), and the model settles to `WILT_HEIGHT` (85 %) at 0 HP |
+| **Bloom** | Elapsed survival time (`0` at the start → `1` at victory) | The heads take on a warm pink glow (`BLOOM_COLOR`), up to `BLOOM_STRENGTH` |
+
+- The red flash is applied last, on top of the wilt tint and the bloom, so bites stay visible at any health or time.
+- The squash and the wilt sag multiply, so a hit still flinches a wilted flower. Only the model's height changes;
+  its lift is scaled with it so the base stays on the ground, and the flower group and its collision circle are
+  untouched, so bees and Tode collide with it exactly as before.
+- When the game ends, the inputs freeze: after a flower defeat it stays fully wilted, after a victory it keeps its
+  full bloom.
+- `resetFlower()` restores 20 HP, clears the flash and puts back the stored colours, glow and size, so a restarted
+  game starts with the original flower.
+
 ## Bee waves
 
 The round is split into four waves by elapsed time (`SURVIVAL_TIME − timeLeft`). The wave is worked out from the
@@ -229,6 +254,10 @@ controlled by the [bee waves](#bee-waves) instead.
 | `PLAYER_SCALING_RATIO` | `0.5` | `main.js` | Player scaling relative to enemies |
 | `SURVIVAL_TIME` | `120` s | `main.js` | Time to survive for victory |
 | `FLOWER_MAX_HEALTH` | `20` | `Flower.js` | Flower health |
+| `FLASH_DURATION` / `FLASH_HEIGHT` | `0.25` s / `0.9` | `Flower.js` | Hit flash length, and the model's height at the moment of a hit |
+| `FLASH_COLOR` | `#ff2020` | `Flower.js` | Hit flash glow |
+| `WILT_COLOR` / `WILT_HEIGHT` | `#8a7a5a` / `0.85` | `Flower.js` | Tint and height at 0 HP |
+| `BLOOM_COLOR` / `BLOOM_STRENGTH` | `#ff8fb8` / `0.35` | `Flower.js` | Glow on the heads at victory |
 | `PLAYER_START` | `(0, -50)` | `Player.js` | Tode's start and restart position |
 | `PLAYER_LIVES` | `3` | `Player.js` | Tode's lives |
 | `INVULNERABILITY_TIME` | `1.5` s | `Player.js` | Time after a hit during which contact costs nothing |
@@ -268,7 +297,7 @@ Pressing Space after any outcome runs `resetGame()`, which:
 - removes every bee, respawns one at each corner, and sets the spawn timer to 0;
 - sets the survival timer back to `SURVIVAL_TIME`, which also returns the game to wave 1;
 - calls `resetPlayer` (start position, 3 lives, no invulnerability, visible model, empty input queue, idle
-  movement), `resetFlower` (20 HP), `resetAttack` (clears any pending press, cooldown and circle) and `resetScore`
+  movement), `resetFlower` (20 HP and its original look), `resetAttack` (clears any pending press, cooldown and circle) and `resetScore`
   (0, so difficulty returns to baseline on the next frame);
 - hides the end screen and removes its victory style.
 
@@ -286,7 +315,8 @@ Current behaviour by design:
 - The victory message names 2 minutes; it does not change automatically if `SURVIVAL_TIME` does.
 - Difficulty stops increasing at a score of 400.
 - The window size is read only at startup; resizing the browser stretches the view until reload.
-- Bees are shown in a fixed pose (the model's animations are not played), and the flower has no animation.
+- Bees are shown in a fixed pose (the model's animations are not played). The flower model has no animations or
+  separate petals, so its reactions are whole-model tints, glow and height changes.
 - Collision is flat: Tode cannot hop over bees.
 
 Possible edge cases, not observed in testing:
