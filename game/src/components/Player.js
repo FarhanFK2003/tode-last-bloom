@@ -12,70 +12,84 @@ const MOVE_SPEED = 3; // hops per second
 const JUMP_DISTANCE = 20;
 const JUMP_HEIGHT = 8;
 
-export const PLAYER_LIVES = 3;
-const INVULNERABILITY_TIME = 1.5; // seconds after a hit during which bees can't cost another life
 const BLINK_RATE = 10; // visibility toggles per second while invulnerable
 
-// Arrow keys move along the world axes (the ground is the XY plane)
+// Hop directions along the world axes (the ground is the XY plane)
 const DIRECTIONS = {
-  ArrowUp: new THREE.Vector2(0, 1),
-  ArrowDown: new THREE.Vector2(0, -1),
-  ArrowLeft: new THREE.Vector2(-1, 0),
-  ArrowRight: new THREE.Vector2(1, 0),
+  up: new THREE.Vector2(0, 1),
+  down: new THREE.Vector2(0, -1),
+  left: new THREE.Vector2(-1, 0),
+  right: new THREE.Vector2(1, 0),
 };
 
-const inputQueue = [];
-const movement = {
-  direction: null,
-  progress: 0,
-  done: true,
-  blocked: false,
-  start: new THREE.Vector2(),
-};
+// The model is loaded and prepared once; every player gets its own copy of it.
+// Tode's model has no skeleton, so a plain clone is safe; copies share its geometry, material and texture.
+let templatePromise = null;
 
-let model = null;
-let modelGroundZ = 0;
-
-let lives = PLAYER_LIVES;
-let invulnerableTime = 0;
-
-export function createPlayer(onLoad) {
-  const player = new THREE.Group();
-  player.position.set(PLAYER_START.x, PLAYER_START.y, 0);
-
-  new GLTFLoader().load(
-    MODEL_PATH,
-    (gltf) => {
-      model = gltf.scene;
+function loadTemplate() {
+  if (!templatePromise) {
+    templatePromise = new GLTFLoader().loadAsync(MODEL_PATH).then((gltf) => {
+      const model = gltf.scene;
       model.rotation.x = Math.PI / 2;
       model.scale.setScalar(MODEL_SCALE);
 
       // Lift the model so its lowest point rests on the ground (z = 0)
       const box = new THREE.Box3().setFromObject(model);
       model.position.z -= box.min.z;
-      modelGroundZ = model.position.z;
 
-      player.userData.collisionRadius = computeCollisionRadius(model);
-      player.add(model);
-      onLoad?.();
+      return { model, collisionRadius: computeCollisionRadius(model) };
+    });
+  }
+  return templatePromise;
+}
+
+// A player is a Group (moved on the ground) holding its own copy of the model.
+// Everything that belongs to one player lives in player.userData.state.
+export function createPlayer(start) {
+  const player = new THREE.Group();
+  player.position.set(start.x, start.y, 0);
+  player.userData.state = {
+    start: start.clone(),
+    inputQueue: [],
+    movement: {
+      direction: null,
+      progress: 0,
+      done: true,
+      blocked: false,
+      start: new THREE.Vector2(),
     },
-    undefined,
-    (error) => console.error(`Failed to load ${MODEL_PATH}`, error),
-  );
+    model: null,
+    modelGroundZ: 0,
+  };
+
+  loadTemplate()
+    .then((template) => {
+      const model = template.model.clone();
+      player.userData.state.model = model;
+      player.userData.state.modelGroundZ = model.position.z;
+      player.userData.collisionRadius = template.collisionRadius;
+      player.add(model);
+    })
+    .catch((error) => console.error(`Failed to load ${MODEL_PATH}`, error));
 
   return player;
 }
 
-// Queues one hop for an arrow key ('ArrowUp', 'ArrowDown', 'ArrowLeft' or 'ArrowRight').
+// Queues one hop ('up', 'down', 'left' or 'right') for this player.
 // Called by the central input handling, only while the game is being played.
-export function queueHop(arrowKey) {
-  if (arrowKey in DIRECTIONS) inputQueue.push(DIRECTIONS[arrowKey]);
+export function queueHop(player, direction) {
+  if (direction in DIRECTIONS) player.userData.state.inputQueue.push(DIRECTIONS[direction]);
 }
 
-// Returns true when Tode's next position runs into an enemy. The flower and houses only block the hop.
-// speedScale multiplies MOVE_SPEED as difficulty increases.
-export function updatePlayer(player, delta, enemies, flower, houses, speedScale) {
-  updateInvulnerability(delta);
+// Returns true when this player's next position runs into an enemy. The flower and houses only block the hop.
+// speedScale multiplies MOVE_SPEED as difficulty increases; invulnerableTime (from Lives.js) drives the blinking.
+export function updatePlayer(player, delta, enemies, flower, houses, speedScale, invulnerableTime) {
+  const { inputQueue, movement, model } = player.userData.state;
+
+  // Blink the model, not the group, so the attached camera and attack circle stay visible
+  if (model) {
+    model.visible = invulnerableTime === 0 || Math.floor(invulnerableTime * BLINK_RATE) % 2 === 0;
+  }
 
   if (movement.done && inputQueue.length > 0) {
     movement.direction = inputQueue.shift();
@@ -118,7 +132,7 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale)
 
   // Hop the model, not the group, so the attached camera stays steady
   if (model) {
-    model.position.z = modelGroundZ + Math.sin(movement.progress * Math.PI) * JUMP_HEIGHT;
+    model.position.z = player.userData.state.modelGroundZ + Math.sin(movement.progress * Math.PI) * JUMP_HEIGHT;
   }
 
   if (movement.progress === 1) {
@@ -128,48 +142,26 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale)
   return touchedEnemy;
 }
 
-function updateInvulnerability(delta) {
-  invulnerableTime = Math.max(invulnerableTime - delta, 0);
-
-  // Blink the model, not the group, so the attached camera and attack circle stay visible
-  if (model) {
-    model.visible = invulnerableTime === 0 || Math.floor(invulnerableTime * BLINK_RATE) % 2 === 0;
-  }
-}
-
-// Costs one life unless Tode is still invulnerable from the previous hit. Returns the lives left.
-export function hitPlayer() {
-  if (invulnerableTime > 0) return lives;
-  lives -= 1;
-  invulnerableTime = INVULNERABILITY_TIME;
-  return lives;
-}
-
-export function getPlayerLives() {
-  return lives;
-}
-
 // Makes the model visible even if the game froze while it was blinking
-export function showPlayerModel() {
+export function showPlayerModel(player) {
+  const { model } = player.userData.state;
   if (model) model.visible = true;
 }
 
 export function resetPlayer(player) {
-  inputQueue.length = 0;
-  movement.direction = null;
-  movement.progress = 0;
-  movement.done = true;
-  movement.blocked = false;
+  const state = player.userData.state;
+  state.inputQueue.length = 0;
+  state.movement.direction = null;
+  state.movement.progress = 0;
+  state.movement.done = true;
+  state.movement.blocked = false;
 
-  lives = PLAYER_LIVES;
-  invulnerableTime = 0;
-
-  player.position.set(PLAYER_START.x, PLAYER_START.y, 0);
+  player.position.set(state.start.x, state.start.y, 0);
   player.visible = true;
 
-  if (model) {
-    model.position.z = modelGroundZ;
-    model.rotation.y = 0;
-    model.visible = true;
+  if (state.model) {
+    state.model.position.z = state.modelGroundZ;
+    state.model.rotation.y = 0;
+    state.model.visible = true;
   }
 }

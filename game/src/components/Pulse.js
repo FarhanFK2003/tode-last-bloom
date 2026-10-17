@@ -11,12 +11,12 @@ const RING_OPACITY = 0.7;
 const RING_COLOR = 0xff8fb8;
 const RING_Z = 0.3; // just above the attack circle
 
-let pulseRequested = false;
-let cooldown = 0;
+// The ring belongs to the flower and is shared; each player's pulse ability has its own request and cooldown
 let ringTimeLeft = 0;
 let ring = null;
 
-// The pulse comes from the flower and can be triggered from anywhere while the game is playing
+// The pulse comes from the flower and can be triggered from anywhere while the game is playing.
+// Creates the shared ring once.
 export function createPulse(flower) {
   ring = new THREE.Mesh(
     new THREE.RingGeometry(PULSE_RADIUS - RING_WIDTH, PULSE_RADIUS, 64),
@@ -28,26 +28,31 @@ export function createPulse(flower) {
   flower.add(ring);
 }
 
+// One player's pulse ability
+export function createPulseAbility() {
+  return { requested: false, cooldown: 0 };
+}
+
 // Called by the central input handling, only while the game is being played
-export function requestPulse() {
-  pulseRequested = true;
+export function requestPulse(ability) {
+  ability.requested = true;
 }
 
 // Gameplay part: only runs while playing. A press during the cooldown is ignored, not saved for later.
-export function updatePulse(delta, enemies, flower) {
-  cooldown = Math.max(cooldown - delta, 0);
+export function updatePulse(ability, delta, enemies, flower) {
+  ability.cooldown = Math.max(ability.cooldown - delta, 0);
 
-  if (pulseRequested && cooldown === 0) {
+  if (ability.requested && ability.cooldown === 0) {
     for (const enemy of enemies) {
       const distance = Math.hypot(enemy.position.x - flower.position.x, enemy.position.y - flower.position.y);
       if (distance <= PULSE_RADIUS) {
         enemy.userData.knockbackTime = KNOCKBACK_TIME;
       }
     }
-    cooldown = PULSE_COOLDOWN;
+    ability.cooldown = PULSE_COOLDOWN;
     ringTimeLeft = RING_DURATION;
   }
-  pulseRequested = false;
+  ability.requested = false;
 }
 
 // Visual part: runs every frame, so a ring that is already expanding finishes after the game ends
@@ -62,13 +67,18 @@ export function updatePulseVisual(delta) {
   ring.material.opacity = RING_OPACITY * (1 - progress);
 }
 
-export function getPulseCooldown() {
-  return cooldown;
+export function getPulseCooldown(ability) {
+  return ability.cooldown;
 }
 
-export function resetPulse() {
-  pulseRequested = false;
-  cooldown = 0;
+// Resets one player's ability only; other players' abilities and the shared ring are untouched
+export function resetPulse(ability) {
+  ability.requested = false;
+  ability.cooldown = 0;
+}
+
+// Hides the shared ring around the flower; called once when a run is reset
+export function resetPulseRing() {
   ringTimeLeft = 0;
   ring.visible = false;
   ring.material.opacity = 0;

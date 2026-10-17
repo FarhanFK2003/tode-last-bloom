@@ -54,10 +54,10 @@ const KNOCKBACK_SPEED = 140; // units per second while pushed back by the bloom 
 
 const toTarget = new THREE.Vector2();
 
-// Moves the enemy toward the flower. Returns 'player' when its next step runs into Tode,
+// Moves the enemy toward the flower. Returns 'player' when its next step runs into any of the players,
 // 'bite' when it lands a bite on the flower, and null otherwise.
 // speedScale multiplies ENEMY_SPEED as difficulty increases.
-export function updateEnemy(enemy, flower, player, delta, enemies, houses, speedScale) {
+export function updateEnemy(enemy, flower, players, delta, enemies, houses, speedScale) {
   toTarget.set(flower.position.x - enemy.position.x, flower.position.y - enemy.position.y);
   const distance = toTarget.length();
   if (distance === 0) return null;
@@ -72,7 +72,7 @@ export function updateEnemy(enemy, flower, player, delta, enemies, houses, speed
     const pushStep = KNOCKBACK_SPEED * delta;
     knockBack(enemy, (-toTarget.x / distance) * pushStep, (-toTarget.y / distance) * pushStep, pushStep, {
       flower,
-      player,
+      players,
       enemies,
       houses,
     });
@@ -90,8 +90,8 @@ export function updateEnemy(enemy, flower, player, delta, enemies, houses, speed
     const nextY = enemy.position.y + dy;
     if (hitsObstacle(enemy, nextX, nextY, houses)) continue;
 
-    // Running into Tode is reported first, so it takes priority over everything else
-    if (blocksMove(enemy, nextX, nextY, player)) {
+    // Running into a player is reported first, so it takes priority over everything else
+    if (players.some((player) => blocksMove(enemy, nextX, nextY, player))) {
       enemy.userData.biteTimer = 0;
       return 'player';
     }
@@ -125,17 +125,17 @@ function stepCandidates(enemy, stepX, stepY, step, houses) {
   return candidates;
 }
 
-// One pushback step, with the same collision rules as normal movement, except that touching Tode
+// One pushback step, with the same collision rules as normal movement, except that touching a player
 // only blocks the bee (it never costs a life) and the bee never bites
-function knockBack(enemy, stepX, stepY, step, { flower, player, enemies, houses }) {
+function knockBack(enemy, stepX, stepY, step, { flower, players, enemies, houses }) {
   for (const [dx, dy] of stepCandidates(enemy, stepX, stepY, step, houses)) {
     if (dx === 0 && dy === 0) continue;
     const nextX = enemy.position.x + dx;
     const nextY = enemy.position.y + dy;
     if (hitsObstacle(enemy, nextX, nextY, houses)) continue;
 
-    // Blocked by Tode, the flower or another bee: stay where it is this frame
-    if (blocksMove(enemy, nextX, nextY, player) || blocksMove(enemy, nextX, nextY, flower)) return;
+    // Blocked by a player, the flower or another bee: stay where it is this frame
+    if (isMoveBlocked(enemy, nextX, nextY, players) || blocksMove(enemy, nextX, nextY, flower)) return;
     if (isMoveBlocked(enemy, nextX, nextY, enemies)) return;
 
     enemy.position.x = nextX;

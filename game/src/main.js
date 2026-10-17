@@ -1,16 +1,14 @@
 import * as THREE from 'three';
 import './style.css';
 import {
-  PLAYER_LIVES,
   PLAYER_START,
   createPlayer,
-  getPlayerLives,
-  hitPlayer,
   queueHop,
   resetPlayer,
   showPlayerModel,
   updatePlayer,
 } from './components/Player.js';
+import { MAX_LIVES, getInvulnerableTime, getLives, hitTeam, resetLives, updateLives } from './components/Lives.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
 import { createAttack, requestAttack, resetAttack, updateAttack } from './components/Attack.js';
 import { createScore, getScore, resetScore, updateScore } from './components/Score.js';
@@ -28,9 +26,11 @@ import {
 import { createHud, updateHud } from './components/Hud.js';
 import {
   createPulse,
+  createPulseAbility,
   getPulseCooldown,
   requestPulse,
   resetPulse,
+  resetPulseRing,
   updatePulse,
   updatePulseVisual,
 } from './components/Pulse.js';
@@ -88,23 +88,35 @@ scene.add(map);
 const flower = createFlower();
 scene.add(flower);
 
-const player = createPlayer();
-player.add(camera);
-scene.add(player);
+// The shared pulse ring around the flower; each player's pulse ability is created with the player
+createPulse(flower);
+
+// Everything one player owns: Tode's group (position, model, movement), its attack and its pulse ability
+function createPlayerSlot(start) {
+  const player = createPlayer(start);
+  scene.add(player);
+  return { player, attack: createAttack(player), pulse: createPulseAbility() };
+}
+
+// The active players. Only one for now; playerGroups is what collision and bee contact checks use.
+const players = [createPlayerSlot(PLAYER_START)];
+const playerGroups = players.map((slot) => slot.player);
+const playerOne = players[0];
+
+// The camera follows Player 1, as before
+playerOne.player.add(camera);
 
 // Houses keep clear of the flower (origin), Tode's start, his current spot, and the enemy spawn corners
 const houses = createHouses(map, MAP_SIZE, [
   new THREE.Vector2(0, 0),
   PLAYER_START,
-  player.position,
+  playerOne.player.position,
   ...SPAWN_POINTS,
 ]);
 
-createAttack(player);
-createPulse(flower);
 createScore();
 createGameOver({ onRestart: startGame, onMainMenu: returnToMenu });
-createHud(PLAYER_LIVES);
+createHud(MAX_LIVES);
 createPauseMenu({ onResume: resume, onRestart: startGame, onMainMenu: returnToMenu });
 createMenu({ onPlay: startGame });
 
@@ -156,12 +168,12 @@ function blurFocusedButton() {
 
 createInput({
   gameplay: {
-    ArrowUp: () => queueHop('ArrowUp'),
-    ArrowDown: () => queueHop('ArrowDown'),
-    ArrowLeft: () => queueHop('ArrowLeft'),
-    ArrowRight: () => queueHop('ArrowRight'),
-    Space: requestAttack,
-    KeyE: requestPulse,
+    ArrowUp: () => queueHop(playerOne.player, 'up'),
+    ArrowDown: () => queueHop(playerOne.player, 'down'),
+    ArrowLeft: () => queueHop(playerOne.player, 'left'),
+    ArrowRight: () => queueHop(playerOne.player, 'right'),
+    Space: () => requestAttack(playerOne.attack),
+    KeyE: () => requestPulse(playerOne.pulse),
   },
   ui: {
     Escape: handleEscape,
@@ -211,11 +223,13 @@ function getWaveIndex() {
 
 function endGame(outcome) {
   setGameState(outcome === 'won' ? 'victory' : 'defeat');
-  if (outcome === 'won') {
-    // Tode stays on screen for the victory, without being left mid-blink
-    showPlayerModel();
-  } else {
-    player.visible = false;
+  for (const { player } of players) {
+    if (outcome === 'won') {
+      // Tode stays on screen for the victory, without being left mid-blink
+      showPlayerModel(player);
+    } else {
+      player.visible = false;
+    }
   }
   showGameOver(OUTCOMES[outcome]);
 }
@@ -231,10 +245,14 @@ function resetRun() {
   spawnTimer = 0;
   timeLeft = SURVIVAL_TIME;
 
-  resetPlayer(player);
+  for (const slot of players) {
+    resetPlayer(slot.player);
+    resetAttack(slot.attack);
+    resetPulse(slot.pulse);
+  }
+  resetPulseRing();
+  resetLives();
   resetFlower();
-  resetAttack();
-  resetPulse();
   resetScore();
   hideGameOver();
 }
@@ -264,17 +282,27 @@ function updateGame(delta) {
   const enemyScale = 1 + difficulty;
   const playerScale = 1 + difficulty * PLAYER_SCALING_RATIO;
 
-  // Running into a bee costs a life (hitPlayer ignores hits while Tode is invulnerable)
-  if (updatePlayer(player, delta, enemies, flower, houses, playerScale) && hitPlayer() === 0) return 'caught';
+  // The invulnerability window counts down first, before any hit this frame (as it always has)
+  updateLives(delta);
 
-  // Remove defeated enemies after collecting them, so the array isn't changed while it's iterated
-  const defeated = updateAttack(player, enemies, delta, playerScale);
+  // Running into a bee costs a life (hitTeam ignores hits during the invulnerability window)
+  for (const { player } of players) {
+    const touchedEnemy = updatePlayer(player, delta, enemies, flower, houses, playerScale, getInvulnerableTime());
+    if (touchedEnemy && hitTeam() === 0) return 'caught';
+  }
+
+  // Collect every attack's defeated bees in a set, so a bee is never removed or scored twice,
+  // then remove them after collecting, so the array isn't changed while it's iterated
+  const defeated = new Set();
+  for (const { attack } of players) {
+    for (const enemy of updateAttack(attack, enemies, delta, playerScale)) defeated.add(enemy);
+  }
   for (const enemy of defeated) {
     removeEnemy(enemy);
   }
 
-  // Only enemies defeated by the attack earn kill points
-  updateScore(delta, defeated.length);
+  // Only enemies defeated by an attack earn kill points
+  updateScore(delta, defeated.size);
 
   // Spawning follows the current wave, independent of the score. The timer accumulates the shared delta,
   // but pauses while the wave's cap of active bees is reached, so freeing several slots can't release a burst
@@ -288,11 +316,13 @@ function updateGame(delta) {
   }
 
   // The bloom pulse marks bees near the flower for pushback before they move this frame
-  updatePulse(delta, enemies, flower);
+  for (const { pulse } of players) {
+    updatePulse(pulse, delta, enemies, flower);
+  }
 
   for (const enemy of enemies) {
-    const result = updateEnemy(enemy, flower, player, delta, enemies, houses, enemyScale);
-    if (result === 'player' && hitPlayer() === 0) return 'caught';
+    const result = updateEnemy(enemy, flower, playerGroups, delta, enemies, houses, enemyScale);
+    if (result === 'player' && hitTeam() === 0) return 'caught';
     if (result === 'bite' && damageFlower(1) === 0) return 'flower';
   }
 
@@ -327,11 +357,11 @@ renderer.setAnimationLoop(() => {
   updateHud({
     flowerHealth: getFlowerHealth(),
     flowerMaxHealth: FLOWER_MAX_HEALTH,
-    lives: getPlayerLives(),
+    lives: getLives(),
     timeLeft,
     wave: getWaveIndex() + 1,
     waveCount: WAVES.length,
-    pulseCooldown: getPulseCooldown(),
+    pulseCooldown: getPulseCooldown(playerOne.pulse),
   });
 
   renderer.render(scene, camera);
