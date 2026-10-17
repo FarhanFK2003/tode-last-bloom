@@ -16,7 +16,14 @@ import { createScore, getScore, resetScore, updateScore } from './components/Sco
 import { createGameOver, hideGameOver, showGameOver } from './components/GameOver.js';
 import { createMap } from './components/Map.js';
 import { createHouses } from './components/House.js';
-import { FLOWER_MAX_HEALTH, createFlower, damageFlower, getFlowerHealth, resetFlower } from './components/Flower.js';
+import {
+  FLOWER_MAX_HEALTH,
+  createFlower,
+  damageFlower,
+  getFlowerHealth,
+  resetFlower,
+  updateFlower,
+} from './components/Flower.js';
 import { createHud, updateHud } from './components/Hud.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
@@ -211,6 +218,9 @@ renderer.setAnimationLoop(() => {
     const outcome = updateGame(delta);
     if (outcome) triggerGameOver(outcome);
   }
+
+  // The flower's look (hit flash, wilt, bloom) is visual only, so it also updates after the game ends
+  updateFlower(delta, (SURVIVAL_TIME - timeLeft) / SURVIVAL_TIME);
 
   // Runs while frozen too, so the end screen keeps the final values
   updateHud({
