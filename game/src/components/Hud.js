@@ -7,9 +7,10 @@ let healthValue = null;
 let lifePips = [];
 let timer = null;
 let waveLabel = null;
+let pulseValue = null;
 
 // Last values written to the page, so it is only touched when something changes
-const shown = { flowerHealth: null, lives: null, seconds: null, wave: null };
+const shown = { flowerHealth: null, lives: null, seconds: null, wave: null, pulse: null };
 
 // Top-left panel with the flower health bar and Tode's life pips, plus the timer and wave at the top right
 export function createHud(maxLives) {
@@ -33,7 +34,12 @@ export function createHud(maxLives) {
   });
   livesRow.append(...lifePips);
 
-  panel.append(healthRow, livesRow);
+  const pulseRow = createRow('Pulse [E]');
+  pulseValue = document.createElement('span');
+  pulseValue.className = 'pulse-value';
+  pulseRow.append(pulseValue);
+
+  panel.append(healthRow, livesRow, pulseRow);
 
   const timerBox = document.createElement('div');
   timerBox.className = 'timer-box';
@@ -56,7 +62,7 @@ function createRow(label) {
   return row;
 }
 
-export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave, waveCount }) {
+export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave, waveCount, pulseCooldown }) {
   if (flowerHealth !== shown.flowerHealth) {
     shown.flowerHealth = flowerHealth;
     const ratio = flowerHealth / flowerMaxHealth;
@@ -81,5 +87,13 @@ export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave
   if (wave !== shown.wave) {
     shown.wave = wave;
     waveLabel.textContent = `Wave ${wave}/${waveCount}`;
+  }
+
+  // 'Ready', or the whole seconds left on the cooldown, rounded up
+  const pulse = pulseCooldown > 0 ? `${Math.ceil(pulseCooldown)}s` : 'Ready';
+  if (pulse !== shown.pulse) {
+    shown.pulse = pulse;
+    pulseValue.textContent = pulse;
+    pulseValue.classList.toggle('ready', pulseCooldown === 0);
   }
 }

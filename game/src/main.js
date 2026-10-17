@@ -25,6 +25,7 @@ import {
   updateFlower,
 } from './components/Flower.js';
 import { createHud, updateHud } from './components/Hud.js';
+import { createPulse, getPulseCooldown, resetPulse, updatePulse, updatePulseVisual } from './components/Pulse.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
@@ -89,6 +90,7 @@ const houses = createHouses(map, MAP_SIZE, [
 ]);
 
 createAttack(player);
+createPulse(flower);
 createScore();
 createGameOver();
 createHud(PLAYER_LIVES);
@@ -154,6 +156,7 @@ function resetGame() {
   resetPlayer(player);
   resetFlower();
   resetAttack();
+  resetPulse();
   resetScore();
   hideGameOver();
 
@@ -192,6 +195,9 @@ function updateGame(delta) {
     }
   }
 
+  // The bloom pulse marks bees near the flower for pushback before they move this frame
+  updatePulse(delta, enemies, flower);
+
   for (const enemy of enemies) {
     const result = updateEnemy(enemy, flower, player, delta, enemies, houses, enemyScale);
     if (result === 'player' && hitPlayer() === 0) return 'caught';
@@ -221,6 +227,8 @@ renderer.setAnimationLoop(() => {
 
   // The flower's look (hit flash, wilt, bloom) is visual only, so it also updates after the game ends
   updateFlower(delta, (SURVIVAL_TIME - timeLeft) / SURVIVAL_TIME);
+  // Likewise, a pulse ring that is already expanding finishes after the game ends
+  updatePulseVisual(delta);
 
   // Runs while frozen too, so the end screen keeps the final values
   updateHud({
@@ -230,6 +238,7 @@ renderer.setAnimationLoop(() => {
     timeLeft,
     wave: getWaveIndex() + 1,
     waveCount: WAVES.length,
+    pulseCooldown: getPulseCooldown(),
   });
 
   renderer.render(scene, camera);

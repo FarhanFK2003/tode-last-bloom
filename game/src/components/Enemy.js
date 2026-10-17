@@ -50,6 +50,7 @@ export function createEnemy(position) {
 }
 
 const BITE_INTERVAL = 1; // seconds of continuous contact with the flower per 1 HP bite
+const KNOCKBACK_SPEED = 140; // units per second while pushed back by the bloom pulse
 
 const toTarget = new THREE.Vector2();
 
@@ -64,21 +65,26 @@ export function updateEnemy(enemy, flower, player, delta, enemies, houses, speed
   // The model faces -Y by default; rotate the group around the world Z axis
   enemy.rotation.z = Math.atan2(toTarget.x, -toTarget.y);
 
+  // Pushed back by the bloom pulse: move away from the flower (still facing it), harmless and unable to bite
+  if (enemy.userData.knockbackTime > 0) {
+    enemy.userData.knockbackTime = Math.max(enemy.userData.knockbackTime - delta, 0);
+    enemy.userData.biteTimer = 0;
+    const pushStep = KNOCKBACK_SPEED * delta;
+    knockBack(enemy, (-toTarget.x / distance) * pushStep, (-toTarget.y / distance) * pushStep, pushStep, {
+      flower,
+      player,
+      enemies,
+      houses,
+    });
+    return null;
+  }
+
   // Never step further than the remaining distance, so enemies don't overshoot
   const step = Math.min(ENEMY_SPEED * speedScale * delta, distance);
   const stepX = (toTarget.x / distance) * step;
   const stepY = (toTarget.y / distance) * step;
 
-  // Try the direct step first. If a house is in the way, slide along its surface (which also
-  // curves around corners), then fall back to sliding one axis at a time.
-  const candidates = [[stepX, stepY]];
-  if (hitsObstacle(enemy, enemy.position.x + stepX, enemy.position.y + stepY, houses)) {
-    const slide = slideAlongObstacle(enemy, stepX, stepY, houses);
-    if (slide) candidates.push([slide.x * step, slide.y * step]);
-  }
-  candidates.push([Math.sign(stepX) * step, 0], [0, Math.sign(stepY) * step]);
-
-  for (const [dx, dy] of candidates) {
+  for (const [dx, dy] of stepCandidates(enemy, stepX, stepY, step, houses)) {
     if (dx === 0 && dy === 0) continue;
     const nextX = enemy.position.x + dx;
     const nextY = enemy.position.y + dy;
@@ -105,6 +111,37 @@ export function updateEnemy(enemy, flower, player, delta, enemies, houses, speed
 
   enemy.userData.biteTimer = 0;
   return null;
+}
+
+// Steps to try, in order: the direct step first. If a house is in the way, slide along its surface
+// (which also curves around corners), then fall back to sliding one axis at a time.
+function stepCandidates(enemy, stepX, stepY, step, houses) {
+  const candidates = [[stepX, stepY]];
+  if (hitsObstacle(enemy, enemy.position.x + stepX, enemy.position.y + stepY, houses)) {
+    const slide = slideAlongObstacle(enemy, stepX, stepY, houses);
+    if (slide) candidates.push([slide.x * step, slide.y * step]);
+  }
+  candidates.push([Math.sign(stepX) * step, 0], [0, Math.sign(stepY) * step]);
+  return candidates;
+}
+
+// One pushback step, with the same collision rules as normal movement, except that touching Tode
+// only blocks the bee (it never costs a life) and the bee never bites
+function knockBack(enemy, stepX, stepY, step, { flower, player, enemies, houses }) {
+  for (const [dx, dy] of stepCandidates(enemy, stepX, stepY, step, houses)) {
+    if (dx === 0 && dy === 0) continue;
+    const nextX = enemy.position.x + dx;
+    const nextY = enemy.position.y + dy;
+    if (hitsObstacle(enemy, nextX, nextY, houses)) continue;
+
+    // Blocked by Tode, the flower or another bee: stay where it is this frame
+    if (blocksMove(enemy, nextX, nextY, player) || blocksMove(enemy, nextX, nextY, flower)) return;
+    if (isMoveBlocked(enemy, nextX, nextY, enemies)) return;
+
+    enemy.position.x = nextX;
+    enemy.position.y = nextY;
+    return;
+  }
 }
 
 // One bite for every full second of continuous contact; losing contact resets the timer

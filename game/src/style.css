@@ -38,7 +38,15 @@ body {
 }
 
 .hud-label {
-  width: 60px;
+  width: 90px;
+}
+
+.pulse-value {
+  color: #ccc;
+}
+
+.pulse-value.ready {
+  color: #ff8fb8;
 }
 
 .health-bar {
