@@ -1,14 +1,36 @@
-# Tode the Frog
+# Tode: Last Bloom
 
-A small 3D browser survival game built with [Three.js](https://threejs.org/) and [Vite](https://vite.dev/).
-Bees spawn at the corners of the map and chase Tode. Defeat them, survive as long as you can, and avoid being touched.
+A small 3D browser game built with [Three.js](https://threejs.org/) and [Vite](https://vite.dev/), extending the
+Tode the Frog project from the JetBrains Academy course "Build a Game with an AI Coding Agent".
 
-## Controls
+A magical flower grows at the centre of the garden. Bees spawn at the corners of the map and fly straight for it.
+Protect the flower for two minutes: keep the bees off it, and don't get caught yourself.
+
+## How to play
 
 | Key | Action |
 |---|---|
 | Arrow keys | Hop one tile in that direction. Presses are queued and played in order; holding a key gives one hop. |
-| Space | Attack while playing (1 s base cooldown). Restart after Game Over. |
+| Space | Attack while playing (1 s base cooldown). Restart after the game ends. |
+
+- **Objective:** survive until the timer reaches `0:00` while the flower still has health and Tode has at least
+  one life.
+- **The flower** starts with 20 HP. Every bee pressed against it bites once per full second of continuous contact,
+  for 1 HP. A bee that loses contact starts its bite timer again.
+- **Tode** has 3 lives. Any contact with a bee, whether Tode hops into it or it flies into him, costs one life.
+  He then blinks for 1.5 s, during which further contact costs nothing. Bees stay solid the whole time.
+- **Victory:** `THE FLOWER BLOOMED` when the 120-second timer runs out. Tode stays on screen and the final score
+  is kept.
+- **Defeat:** `DEFEAT / The flower wilted` when the flower reaches 0 HP, or `DEFEAT / Tode was caught` when he
+  loses his last life. Tode is hidden.
+- When the game ends, everything freezes and the HUD keeps its final values. Press Space to play again.
+
+### HUD
+
+- **Top left:** the flower health bar with its value (for example `20/20`), and one pip per life, filled for each
+  life Tode has left. The bar is green above 50 %, yellow at or below 50 %, and red below 25 %.
+- **Top centre:** `Score: N`.
+- **Top right:** the survival timer, `m:ss`, counting down from `2:00`.
 
 ## Running
 
@@ -27,69 +49,82 @@ Repository rules (`AGENTS.md`, `.junie/guidelines.md`): make changes in `game/` 
 
 ## Architecture
 
-`src/main.js` is the conductor. It creates the scene and lights, owns the enemy list, spawning, difficulty and game
-state, and runs the single animation loop. Each file in `src/components/` builds one part of the game and is wired
-together by `main.js`; components do not import each other.
+`src/main.js` is the conductor. It creates the scene and lights, owns the enemy list, spawning, difficulty, the
+survival timer and the game state, and runs the single animation loop. Each file in `src/components/` builds one
+part of the game and is wired together by `main.js`; components do not import each other.
 
 | File | Responsibility | Exports |
 |---|---|---|
-| `src/main.js` | Scene, lights, constants, enemy list and spawning, difficulty, Game Over/reset, animation loop | — |
-| `src/collision.js` | Collision radius from model vertices; circle-vs-circle and circle-vs-rectangle move checks | `COLLISION_DISTANCE`, `computeCollisionRadius`, `blocksMove`, `isMoveBlocked`, `hitsObstacle` |
+| `src/main.js` | Scene, lights, constants, enemy list and spawning, difficulty, timer, outcomes, reset, animation loop | — |
+| `src/collision.js` | Collision radius from model vertices; circle-vs-circle and circle-vs-rectangle move checks; sliding around obstacles | `COLLISION_DISTANCE`, `computeCollisionRadius`, `blocksMove`, `isMoveBlocked`, `hitsObstacle`, `slideAlongObstacle` |
 | `components/Renderer.js` | `WebGLRenderer` on `canvas.game` (transparent, antialiased, window-sized) | `createRenderer` |
 | `components/Camera.js` | Perspective camera, Z-up, looking at the origin | `createCamera` |
-| `components/Player.js` | Tode model, arrow-key queue, hop movement, player collision | `createPlayer`, `updatePlayer`, `resetPlayer` |
-| `components/Enemy.js` | Bee model (loaded once, cloned per bee), chasing, enemy collision | `createEnemy`, `updateEnemy` |
+| `components/Flower.js` | Flower model at the origin and its health | `FLOWER_MAX_HEALTH`, `createFlower`, `damageFlower`, `getFlowerHealth`, `resetFlower` |
+| `components/Player.js` | Tode model, arrow-key queue, hop movement, player collision, lives and invulnerability | `PLAYER_START`, `PLAYER_LIVES`, `createPlayer`, `updatePlayer`, `hitPlayer`, `getPlayerLives`, `showPlayerModel`, `resetPlayer` |
+| `components/Enemy.js` | Bee model (loaded once, cloned per bee), flying to the flower, biting, enemy collision | `createEnemy`, `updateEnemy` |
 | `components/Attack.js` | Space input, cooldown, fading yellow circle, hit test | `createAttack`, `updateAttack`, `resetAttack` |
 | `components/Score.js` | Score value and `div.score` display | `createScore`, `updateScore`, `getScore`, `resetScore` |
-| `components/GameOver.js` | `div.game-over` overlay | `createGameOver`, `showGameOver`, `hideGameOver` |
+| `components/Hud.js` | Flower health bar, life pips and timer | `createHud`, `updateHud` |
+| `components/GameOver.js` | `div.game-over` end screen, with a victory style | `createGameOver`, `showGameOver`, `hideGameOver` |
 | `components/Map.js` | Checkerboard floor (one plane with a canvas texture) | `createMap` |
 | `components/House.js` | House model, placement and ground footprints | `createHouses` |
-| `src/style.css` | Page reset, score and Game Over styling | — |
+| `src/style.css` | Page reset, score, HUD and end-screen styling | — |
 
-Models are loaded asynchronously from `public/models/` (`tode.glb`, `enemy.glb`, `small_house.glb`). Each
-`create…` function returns its object immediately and adds the model when it arrives, so the game runs while models load.
+Models are loaded asynchronously from `public/models/` (`tode.glb`, `enemy.glb`, `small_house.glb`,
+`flower_single.glb`). Each `create…` function returns its object immediately and adds the model when it arrives,
+so the game runs while models load.
 
 ## Frame loop
 
 `renderer.setAnimationLoop` runs once per display frame:
 
-1. **Time:** `delta = min(clock.getDelta(), MAX_DELTA)`. This is the only clock read; every system receives this
-   `delta`. Do not call `getDelta()` or `getElapsedTime()` anywhere else: both reset the clock and would shrink `delta`.
-2. **Game Over:** if the game is over, nothing updates. A Space press (registered only in this state) runs
-   `resetGame()`.
+1. **Time:** `delta = min(clock.getDelta(), MAX_DELTA)`. This is the only clock read; every system, including the
+   survival timer, receives this `delta`. Do not call `getDelta()` or `getElapsedTime()` anywhere else: both reset
+   the clock and would shrink `delta`. The browser pauses the loop in a hidden tab, so no time passes there.
+2. **Game ended:** nothing updates. A Space press (registered only in this state) runs `resetGame()`.
 3. **Playing:** `updateGame(delta)` runs, in this order:
    1. Difficulty factors from the raw score (see [Difficulty](#difficulty)).
-   2. `updatePlayer` starts the next queued hop or advances the current one. Returns `true` if Tode runs into a bee.
+   2. `updatePlayer` starts the next queued hop or advances the current one, and counts down invulnerability.
+      It returns `true` if Tode runs into a bee, and `main.js` calls `hitPlayer()`.
    3. `updateAttack` returns the bees hit by an attack this frame; `main.js` removes them from the scene and the list.
    4. `updateScore` adds survival time and kill points.
    5. The spawn timer accumulates `delta` and spawns a bee at a random corner when it reaches the spawn delay.
-   6. `updateEnemy` for each bee. Returns `true` if the bee runs into Tode.
+   6. `updateEnemy` for each bee. It returns `'player'` if the bee runs into Tode (→ `hitPlayer()`), `'bite'` when
+      it lands a bite on the flower (→ `damageFlower(1)`), or `null`.
+   7. The survival timer counts down by `delta`.
 
-   As soon as the player or any bee reports contact, `updateGame` returns `true` and `triggerGameOver()` hides Tode
-   and shows the overlay. The rest of that frame's updates are skipped.
-4. **Render:** `renderer.render(scene, camera)` runs every frame, including while the game is over.
+   `updateGame` returns the outcome that ends the game, or `null`. A defeat returns as soon as it happens and
+   skips the rest of the frame: `'caught'` when `hitPlayer()` leaves 0 lives, `'flower'` when `damageFlower(1)`
+   leaves 0 HP. Victory (`'won'`) is checked last, when the timer reaches 0, so a defeat in the same frame wins.
+   `triggerGameOver(outcome)` freezes the game, shows that outcome's end screen, and hides Tode on defeat (on
+   victory it keeps him visible and stops his blinking).
+4. **HUD:** `updateHud` runs every frame, including after the game ends, and only rewrites the page when a shown
+   value changes.
+5. **Render:** `renderer.render(scene, camera)` runs every frame, including after the game ends.
 
 ## Coordinate system and camera
 
 - **Z is up.** The ground is the XY plane at `z = 0`. Models are rotated `Math.PI / 2` around X and lifted with
   their bounding box so their lowest point sits on the ground.
+- The flower stands at the origin. Tode starts at `PLAYER_START = (0, -50)`, in front of it.
 - The camera is a child of the player group, at `(300, -300, 300)` relative to Tode with `camera.up = (0, 0, 1)`,
   so it follows him automatically.
 - Tode is a `Group` (moved on X/Y) holding the model. The **model** is turned to face the hop direction
-  (`rotation.y`, which spins around world Z after the X rotation) and raised for the hop arc
-  (`sin(progress · π) · JUMP_HEIGHT`). The group never rotates or rises, so the camera stays steady.
+  (`rotation.y`, which spins around world Z after the X rotation), raised for the hop arc
+  (`sin(progress · π) · JUMP_HEIGHT`), and blinked while invulnerable. The group never rotates or rises, so the
+  camera and the attack circle stay steady.
 - Arrow keys move along world axes; because of the camera angle, hops look diagonal on screen.
-- Bees rotate their whole group around Z to face Tode. Model forward is assumed to be −Y after the X rotation.
+- Bees rotate their whole group around Z to face the flower. Model forward is assumed to be −Y after the X rotation.
 
 ## Collision
 
 All collision is 2D on the ground plane and is checked before a move is applied: an object only moves if its
 next position is valid.
 
-- **Characters are circles.** `computeCollisionRadius` measures the farthest model vertex from the group origin
-  in XY, once at load (skinned bee vertices include their pose). The bee model is shifted so its footprint is
-  centred on the group it rotates around. Two characters collide when the distance between centres is less than
-  `radiusA + radiusB + COLLISION_DISTANCE`.
+- **Characters and the flower are circles.** `computeCollisionRadius` measures the farthest model vertex from the
+  group origin in XY, once at load (skinned bee vertices include their pose). The bee model is shifted so its
+  footprint is centred on the group it rotates around. Two circles collide when the distance between centres is
+  less than `radiusA + radiusB + COLLISION_DISTANCE`.
 - **Houses are rectangles.** Each house stores a `Box2` footprint in world coordinates, built from its vertices up
   to `FOOTPRINT_HEIGHT`, so the walls and base count but the roof overhang and chimney smoke do not. Houses only
   turn in quarter turns, so the rectangle stays axis-aligned. A character hits a house when its circle comes
@@ -100,20 +135,28 @@ next position is valid.
 
 | Situation | Result |
 |---|---|
-| Tode's hop runs into a bee | Game Over |
-| A bee's step runs into Tode (Tode moving or not) | Game Over; the bee stops touching, not inside |
-| Tode's hop runs into a house | Forward motion stops for the rest of that hop; the jump arc still finishes. No Game Over. |
-| A bee's step runs into another bee | The bee stays put this frame and still faces Tode |
-| A bee's step runs into a house | It tries the same step along X only, then Y only, to slide along the wall |
+| Tode's hop runs into a bee | Costs a life (unless invulnerable); forward motion stops for the rest of that hop |
+| A bee's step runs into Tode (Tode moving or not) | Costs a life (unless invulnerable); the bee stops touching, not inside |
+| A bee's step reaches the flower | The bee stays touching it and bites once per full second of contact |
+| Tode's hop runs into the flower or a house | Forward motion stops for the rest of that hop; the jump arc still finishes. No damage. |
+| A bee's step runs into another bee | The bee stays put this frame and still faces the flower |
+| A bee's step runs into a house | It slides along the house instead (see below) |
 
-Game Over is checked before blocking: the step that would touch the other character is the trigger. Houses never
-take part in the contact check.
+Contact with Tode is checked before anything else, so a bee touching both Tode and the flower counts as touching
+Tode. Houses never cost lives or health.
+
+**Getting around houses.** A bee first tries its direct step toward the flower. If a house blocks it,
+`slideAlongObstacle` finds the closest point of that house and returns the direction along its surface (at right
+angles to the line from that point) that best follows the bee's intended direction. At a flat wall this slides
+along the wall; at a corner it curves around the corner, so bees no longer get stuck on house corners. If that is
+also blocked, the bee falls back to the same step along X only, then Y only.
 
 ## Attack and score
 
 - Space sets a request flag; the attack happens in the loop if the cooldown is 0. Presses during the cooldown are
   discarded, not queued.
-- A bee is hit when `distance ≤ attackRadius + bee collision radius` (the circle touches its footprint).
+- A bee is hit when `distance ≤ attackRadius + bee collision radius` (the circle touches its footprint). This
+  includes bees biting the flower.
 - The circle is a child of the player group at `z = ATTACK_VISUAL_Z`. It is shown at 0.6 opacity, fades to 0 over
   `ATTACK_VISUAL_DURATION`, and is scaled to the current attack radius.
 - Score = survival time × `SCORE_PER_SECOND` + kills × `SCORE_PER_KILL`. Kills are counted from the bees returned
@@ -138,6 +181,8 @@ playerScale = 1 + difficulty × PLAYER_SCALING_RATIO   // 1 → 2
 | Attack cooldown | `ATTACK_COOLDOWN / playerScale` (set when an attack fires) | 1 s → 0.5 s |
 | Attack radius | `ATTACK_RADIUS × playerScale` | 30 → 60 |
 
+Survival alone earns 12 points in a full 120-second game, so difficulty rises mainly through kills.
+
 ## Constants
 
 | Constant | Value | File | Meaning |
@@ -150,55 +195,73 @@ playerScale = 1 + difficulty × PLAYER_SCALING_RATIO   // 1 → 2
 | `DIFFICULTY_GROWTH_RATE` | `0.005` | `main.js` | Difficulty per score point |
 | `MAX_DIFFICULTY` | `2` | `main.js` | Difficulty ceiling |
 | `PLAYER_SCALING_RATIO` | `0.5` | `main.js` | Player scaling relative to enemies |
+| `SURVIVAL_TIME` | `120` s | `main.js` | Time to survive for victory |
+| `FLOWER_MAX_HEALTH` | `20` | `Flower.js` | Flower health |
+| `PLAYER_START` | `(0, -50)` | `Player.js` | Tode's start and restart position |
+| `PLAYER_LIVES` | `3` | `Player.js` | Tode's lives |
+| `INVULNERABILITY_TIME` | `1.5` s | `Player.js` | Time after a hit during which contact costs nothing |
+| `BLINK_RATE` | `10` per s | `Player.js` | Model visibility toggles while invulnerable |
 | `MOVE_SPEED` | `3` hops/s | `Player.js` | Base hop speed |
 | `JUMP_DISTANCE` | `20` | `Player.js` | Hop length |
 | `JUMP_HEIGHT` | `8` | `Player.js` | Hop arc height |
 | `ENEMY_SPEED` | `30` units/s | `Enemy.js` | Base bee speed |
+| `BITE_INTERVAL` | `1` s | `Enemy.js` | Continuous contact needed per 1 HP bite |
 | `ATTACK_COOLDOWN` | `1` s | `Attack.js` | Base time between attacks |
 | `ATTACK_RADIUS` | `30` | `Attack.js` | Base attack reach |
 | `ATTACK_VISUAL_DURATION` | `0.25` s | `Attack.js` | Circle fade time |
 | `ATTACK_VISUAL_Z` | `0.25` | `Attack.js` | Circle height above the ground |
 | `SCORE_PER_SECOND` | `0.1` | `Score.js` | Survival points per second |
 | `SCORE_PER_KILL` | `10` | `Score.js` | Points per bee defeated |
+| `WARNING_RATIO` / `DANGER_RATIO` | `0.5` / `0.25` | `Hud.js` | Flower bar turns yellow at or below / red below these fractions |
 | `COLLISION_DISTANCE` | `0` | `collision.js` | Extra gap between footprints (negative allows overlap) |
 | `HOUSE_COUNT` | `3` | `House.js` | Houses placed |
 | `CLEARANCE` | `90` | `House.js` | Minimum distance from a house's footprint centre to another house or a protected point |
 | `MAX_PLACEMENT_ATTEMPTS` | `100` | `House.js` | Random positions tried per house |
 | `FOOTPRINT_HEIGHT` | `15` | `House.js` | Vertices up to this height form a house's ground footprint |
 
-Model scales: Tode `20`, bee `5`, house `65`.
+Model scales: Tode `20`, bee `5`, house `65`, flower `15`.
 
 ## Houses
 
 `createHouses` loads the model once and places `HOUSE_COUNT` clones. Each gets a random quarter-turn around its
 vertical axis, is grounded, and has its footprint measured from the final rotated and scaled model. A random
-position is accepted only if the footprint lies inside the map and its centre is at least `CLEARANCE` from Tode's
-start, Tode's position at load time, each spawn corner, and every house already placed. After
-`MAX_PLACEMENT_ATTEMPTS` failures the house is skipped with a `console.warn`. Houses are added to the map group.
+position is accepted only if the footprint lies inside the map and its centre is at least `CLEARANCE` from the
+flower (origin), Tode's start, Tode's position at load time, each spawn corner, and every house already placed.
+After `MAX_PLACEMENT_ATTEMPTS` failures the house is skipped with a `console.warn`. Houses are added to the map group.
 
-## Reset
+## Restart
 
-`resetGame()` removes every bee and respawns one at each corner, sets the spawn timer to 0, and calls
-`resetPlayer` (origin, empty input queue, idle movement, model grounded and visible), `resetAttack` (clears any
-pending press, cooldown and circle) and `resetScore` (0, so difficulty returns to baseline on the next frame).
-It then hides the overlay. Houses keep their positions until the page is reloaded.
+Pressing Space after any outcome runs `resetGame()`, which:
+
+- removes every bee, respawns one at each corner, and sets the spawn timer to 0;
+- sets the survival timer back to `SURVIVAL_TIME`;
+- calls `resetPlayer` (start position, 3 lives, no invulnerability, visible model, empty input queue, idle
+  movement), `resetFlower` (20 HP), `resetAttack` (clears any pending press, cooldown and circle) and `resetScore`
+  (0, so difficulty returns to baseline on the next frame);
+- hides the end screen and removes its victory style.
+
+The Space press that restarts the game does not also attack: attacks only run while playing, and `resetAttack`
+clears the request that press made. Houses keep their positions until the page is reloaded.
 
 ## Known limitations
 
 Current behaviour by design:
 
+- The camera follows Tode, so the flower is off-screen when he is far from it; the HUD shows its health.
 - No map edges: Tode can hop past the floor.
 - Houses can hide Tode when they are between him and the camera.
-- Houses only change on page reload, not on reset.
+- Houses only change on page reload, not on restart.
+- The victory message names 2 minutes; it does not change automatically if `SURVIVAL_TIME` does.
 - Difficulty stops increasing at a score of 400.
 - The window size is read only at startup; resizing the browser stretches the view until reload.
-- Bees are shown in a fixed pose (the model's animations are not played).
+- Bees are shown in a fixed pose (the model's animations are not played), and the flower has no animation.
 - Collision is flat: Tode cannot hop over bees.
 
 Possible edge cases, not observed in testing:
 
-- A bee whose direct, X-only and Y-only steps are all blocked by houses waits until its path changes.
-- Before the house model loads (typically under a second), there is nothing to collide with.
+- A bee whose direct, surface-slide, X-only and Y-only steps are all blocked by houses waits until its path changes.
+- Before the house model loads (typically under a second), there is nothing to collide with; before the flower
+  model loads, its collision radius is 0.
 - A house is skipped if no valid position is found within 100 attempts.
 - At very high speeds combined with a very slow frame, a single step could exceed the gap between objects.
   Within the current difficulty ceiling, the largest step (90 units/s × 0.1 s = 9) is well below a character's size.
@@ -206,3 +269,6 @@ Possible edge cases, not observed in testing:
 ## Credits
 
 - Flower Single by Quaternius (CC0) via Poly Pizza: https://poly.pizza/m/GvfHo0roi3
+- Armabee Evolved (`enemy.glb`) by Quaternius (Public Domain) via Poly Pizza: https://poly.pizza/m/GcttdvsqsQ
+- Small House (`small_house.glb`) by Jarlan Perez (CC-BY 3.0) via Poly Pizza: https://poly.pizza/m/053kskrV4U_
+- Tode the Frog (`tode.glb`) is provided by the JetBrains Academy course.
