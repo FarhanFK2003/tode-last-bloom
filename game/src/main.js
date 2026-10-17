@@ -6,12 +6,13 @@ import {
   createPlayer,
   getPlayerLives,
   hitPlayer,
+  queueHop,
   resetPlayer,
   showPlayerModel,
   updatePlayer,
 } from './components/Player.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
-import { createAttack, resetAttack, updateAttack } from './components/Attack.js';
+import { createAttack, requestAttack, resetAttack, updateAttack } from './components/Attack.js';
 import { createScore, getScore, resetScore, updateScore } from './components/Score.js';
 import { createGameOver, hideGameOver, showGameOver } from './components/GameOver.js';
 import { createMap } from './components/Map.js';
@@ -25,7 +26,17 @@ import {
   updateFlower,
 } from './components/Flower.js';
 import { createHud, updateHud } from './components/Hud.js';
-import { createPulse, getPulseCooldown, resetPulse, updatePulse, updatePulseVisual } from './components/Pulse.js';
+import {
+  createPulse,
+  getPulseCooldown,
+  requestPulse,
+  resetPulse,
+  updatePulse,
+  updatePulseVisual,
+} from './components/Pulse.js';
+import { createInput, setGameplayEnabled } from './components/Input.js';
+import { createMenu, hideMenu, menuBack, showMenu } from './components/Menu.js';
+import { createPauseMenu, hidePauseMenu, pauseMenuBack, showPauseMenu } from './components/PauseMenu.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
@@ -92,8 +103,10 @@ const houses = createHouses(map, MAP_SIZE, [
 createAttack(player);
 createPulse(flower);
 createScore();
-createGameOver();
+createGameOver({ onRestart: startGame, onMainMenu: returnToMenu });
 createHud(PLAYER_LIVES);
+createPauseMenu({ onResume: resume, onRestart: startGame, onMainMenu: returnToMenu });
+createMenu({ onPlay: startGame });
 
 const enemies = [];
 
@@ -121,19 +134,69 @@ function removeEnemy(enemy) {
   enemies.splice(enemies.indexOf(enemy), 1);
 }
 
-SPAWN_POINTS.forEach((point) => spawnEnemy(point));
 let spawnTimer = 0;
-
 let timeLeft = SURVIVAL_TIME;
-let gameOver = false;
-let resetRequested = false;
 
-// Space attacks while playing (handled in Attack.js); after Game Over it restarts the game.
-// The reset itself runs in the animation loop, which also clears the attack this press requested.
-window.addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.repeat || !gameOver) return;
-  resetRequested = true;
+// 'menu' | 'playing' | 'paused' | 'victory' | 'defeat'. The game opens on the main menu, with the
+// garden shown and no bees; a run only starts from startGame().
+let gameState = 'menu';
+
+function setGameState(state) {
+  gameState = state;
+  // Gameplay keys only act while playing, so nothing pressed in a menu or while paused carries over
+  setGameplayEnabled(state === 'playing');
+  // Lets the stylesheet hide the HUD on the main menu
+  document.body.dataset.state = state;
+}
+
+// A focused menu button would otherwise react to Space or Enter during play
+function blurFocusedButton() {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+}
+
+createInput({
+  gameplay: {
+    ArrowUp: () => queueHop('ArrowUp'),
+    ArrowDown: () => queueHop('ArrowDown'),
+    ArrowLeft: () => queueHop('ArrowLeft'),
+    ArrowRight: () => queueHop('ArrowRight'),
+    Space: requestAttack,
+    KeyE: requestPulse,
+  },
+  ui: {
+    Escape: handleEscape,
+    // On the end screens Space restarts, unless a button has focus: the button then handles the press itself
+    Space: (event) => {
+      const ended = gameState === 'victory' || gameState === 'defeat';
+      if (ended && !(event.target instanceof HTMLButtonElement)) startGame();
+    },
+  },
 });
+
+function handleEscape() {
+  if (gameState === 'playing') {
+    pause();
+  } else if (gameState === 'paused') {
+    if (!pauseMenuBack()) resume();
+  } else if (gameState === 'menu') {
+    menuBack();
+  }
+}
+
+function pause() {
+  setGameState('paused');
+  showPauseMenu();
+}
+
+// Continues exactly where the game was paused: nothing gameplay-related ran in the meantime
+function resume() {
+  hidePauseMenu();
+  blurFocusedButton();
+  setGameState('playing');
+}
+
+setGameState('menu');
+showMenu();
 
 // The current wave follows from the survival timer, so it can never drift out of sync with it.
 // Once time has run out (victory), it stays on the last wave.
@@ -146,8 +209,8 @@ function getWaveIndex() {
   return index;
 }
 
-function triggerGameOver(outcome) {
-  gameOver = true;
+function endGame(outcome) {
+  setGameState(outcome === 'won' ? 'victory' : 'defeat');
   if (outcome === 'won') {
     // Tode stays on screen for the victory, without being left mid-blink
     showPlayerModel();
@@ -157,13 +220,14 @@ function triggerGameOver(outcome) {
   showGameOver(OUTCOMES[outcome]);
 }
 
-function resetGame() {
+// Clears everything a run changes, back to the calm garden: no bees, full flower, Tode at the start.
+// The scene, map, houses and models themselves are created once and kept.
+function resetRun() {
   for (const enemy of enemies) {
     scene.remove(enemy);
     disposeEnemy(enemy);
   }
   enemies.length = 0;
-  SPAWN_POINTS.forEach((point) => spawnEnemy(point));
   spawnTimer = 0;
   timeLeft = SURVIVAL_TIME;
 
@@ -173,9 +237,23 @@ function resetGame() {
   resetPulse();
   resetScore();
   hideGameOver();
+}
 
-  gameOver = false;
-  resetRequested = false;
+// Starts a fresh run: from the main menu, the pause menu or an end screen
+function startGame() {
+  resetRun();
+  SPAWN_POINTS.forEach((point) => spawnEnemy(point));
+  hideMenu();
+  hidePauseMenu();
+  blurFocusedButton();
+  setGameState('playing');
+}
+
+function returnToMenu() {
+  resetRun();
+  hidePauseMenu();
+  setGameState('menu');
+  showMenu();
 }
 
 // Returns the outcome that ends the game this frame ('caught', 'flower' or 'won'), or null to keep playing.
@@ -231,18 +309,19 @@ renderer.setAnimationLoop(() => {
   // Read delta once per frame and share it with every system that needs it
   const delta = Math.min(clock.getDelta(), MAX_DELTA);
 
-  // While the game is over, nothing updates, but the frozen scene keeps rendering
-  if (gameOver) {
-    if (resetRequested) resetGame();
-  } else {
+  // Gameplay only runs while playing. In every other state the scene is frozen but keeps rendering.
+  // The clock is still read every frame, so resuming never sees a large delta.
+  if (gameState === 'playing') {
     const outcome = updateGame(delta);
-    if (outcome) triggerGameOver(outcome);
+    if (outcome) endGame(outcome);
   }
 
-  // The flower's look (hit flash, wilt, bloom) is visual only, so it also updates after the game ends
-  updateFlower(delta, (SURVIVAL_TIME - timeLeft) / SURVIVAL_TIME);
-  // Likewise, a pulse ring that is already expanding finishes after the game ends
-  updatePulseVisual(delta);
+  // Visual-only updates also run on the end screens, so a hit flash or pulse ring can finish and the final
+  // wilt or bloom stays on screen. They stay frozen while paused and on the main menu.
+  if (gameState === 'playing' || gameState === 'victory' || gameState === 'defeat') {
+    updateFlower(delta, (SURVIVAL_TIME - timeLeft) / SURVIVAL_TIME);
+    updatePulseVisual(delta);
+  }
 
   // Runs while frozen too, so the end screen keeps the final values
   updateHud({

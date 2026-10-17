@@ -16,7 +16,7 @@ let cooldown = 0;
 let ringTimeLeft = 0;
 let ring = null;
 
-// The pulse comes from the flower; E triggers it from anywhere while the game is playing
+// The pulse comes from the flower and can be triggered from anywhere while the game is playing
 export function createPulse(flower) {
   ring = new THREE.Mesh(
     new THREE.RingGeometry(PULSE_RADIUS - RING_WIDTH, PULSE_RADIUS, 64),
@@ -26,13 +26,11 @@ export function createPulse(flower) {
   ring.position.z = RING_Z;
   ring.visible = false;
   flower.add(ring);
+}
 
-  window.addEventListener('keydown', (event) => {
-    if (event.code !== 'KeyE') return;
-    event.preventDefault();
-    if (event.repeat) return;
-    pulseRequested = true;
-  });
+// Called by the central input handling, only while the game is being played
+export function requestPulse() {
+  pulseRequested = true;
 }
 
 // Gameplay part: only runs while playing. A press during the cooldown is ignored, not saved for later.

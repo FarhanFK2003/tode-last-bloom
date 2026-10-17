@@ -1,8 +1,11 @@
+import { createButton } from '../ui.js';
+
 let element = null;
 let title = null;
 let message = null;
+let restartButton = null;
 
-export function createGameOver() {
+export function createGameOver({ onRestart, onMainMenu }) {
   element = document.createElement('div');
   element.className = 'game-over';
   element.hidden = true;
@@ -13,7 +16,12 @@ export function createGameOver() {
   const hint = document.createElement('p');
   hint.textContent = 'Press SPACE to Restart';
 
-  element.append(title, message, hint);
+  const buttons = document.createElement('div');
+  buttons.className = 'game-over-buttons';
+  restartButton = createButton('Restart', onRestart);
+  buttons.append(restartButton, createButton('Main Menu', onMainMenu));
+
+  element.append(title, message, hint, buttons);
   document.body.appendChild(element);
 }
 
@@ -23,6 +31,7 @@ export function showGameOver(outcome) {
   message.textContent = outcome.message;
   element.classList.toggle('victory', outcome.victory);
   element.hidden = false;
+  restartButton.focus();
 }
 
 export function hideGameOver() {

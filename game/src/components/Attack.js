@@ -22,13 +22,11 @@ export function createAttack(player) {
   circle.position.z = ATTACK_VISUAL_Z;
   circle.visible = false;
   player.add(circle);
+}
 
-  window.addEventListener('keydown', (event) => {
-    if (event.code !== 'Space') return;
-    event.preventDefault();
-    if (event.repeat) return;
-    attackRequested = true;
-  });
+// Called by the central input handling, only while the game is being played
+export function requestAttack() {
+  attackRequested = true;
 }
 
 // Returns the enemies defeated this frame; the caller removes them from the scene and the array.

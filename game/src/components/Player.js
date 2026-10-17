@@ -63,14 +63,13 @@ export function createPlayer(onLoad) {
     (error) => console.error(`Failed to load ${MODEL_PATH}`, error),
   );
 
-  window.addEventListener('keydown', (event) => {
-    if (!(event.key in DIRECTIONS)) return;
-    event.preventDefault();
-    if (event.repeat) return;
-    inputQueue.push(DIRECTIONS[event.key]);
-  });
-
   return player;
+}
+
+// Queues one hop for an arrow key ('ArrowUp', 'ArrowDown', 'ArrowLeft' or 'ArrowRight').
+// Called by the central input handling, only while the game is being played.
+export function queueHop(arrowKey) {
+  if (arrowKey in DIRECTIONS) inputQueue.push(DIRECTIONS[arrowKey]);
 }
 
 // Returns true when Tode's next position runs into an enemy. The flower and houses only block the hop.
