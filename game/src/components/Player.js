@@ -104,7 +104,10 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale)
 
     if (isMoveBlocked(player, nextX, nextY, enemies)) {
       movement.blocked = true;
-      touchedEnemy = true;
+      // Every bee blocks the hop, but one being pushed back by the bloom pulse is harmless
+      touchedEnemy = enemies.some(
+        (enemy) => !(enemy.userData.knockbackTime > 0) && blocksMove(player, nextX, nextY, enemy),
+      );
     } else if (blocksMove(player, nextX, nextY, flower) || hitsObstacle(player, nextX, nextY, houses)) {
       // The flower and houses stop the hop but never cost a life
       movement.blocked = true;

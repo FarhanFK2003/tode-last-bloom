@@ -103,8 +103,21 @@ function spawnEnemy(position) {
   scene.add(enemy);
 }
 
+// Each bee copy has its own skeletons (its geometry and materials are shared with the loaded template),
+// and the renderer gives every skeleton a small GPU texture, so free those when a bee goes away
+function disposeEnemy(enemy) {
+  const skeletons = new Set();
+  enemy.traverse((object) => {
+    if (object.isSkinnedMesh) skeletons.add(object.skeleton);
+  });
+  for (const skeleton of skeletons) {
+    skeleton.dispose();
+  }
+}
+
 function removeEnemy(enemy) {
   scene.remove(enemy);
+  disposeEnemy(enemy);
   enemies.splice(enemies.indexOf(enemy), 1);
 }
 
@@ -147,6 +160,7 @@ function triggerGameOver(outcome) {
 function resetGame() {
   for (const enemy of enemies) {
     scene.remove(enemy);
+    disposeEnemy(enemy);
   }
   enemies.length = 0;
   SPAWN_POINTS.forEach((point) => spawnEnemy(point));

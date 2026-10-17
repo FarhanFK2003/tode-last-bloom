@@ -6,5 +6,8 @@ export function createRenderer() {
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
 
+  // Keep filling the window when it is resized
+  window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight));
+
   return renderer;
 }

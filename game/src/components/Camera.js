@@ -10,5 +10,11 @@ export function createCamera() {
   camera.up.set(0, 0, 1);
   camera.lookAt(0, 0, 0);
 
+  // Match the window's shape when it is resized, so the scene isn't stretched
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
   return camera;
 }
