@@ -284,3 +284,58 @@ body[data-state='menu'] .timer-box {
 .menu-controls dd {
   margin: 0;
 }
+
+/* Settings: volume sliders and mute */
+.settings-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  margin: 6px 0 4px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 48px;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  text-align: left;
+}
+
+.settings-name {
+  font-weight: bold;
+  color: #2e8b57;
+}
+
+.settings-row input[type='range'] {
+  width: 100%;
+  accent-color: #3cb371;
+  cursor: pointer;
+}
+
+.settings-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-controls.muted .settings-row {
+  opacity: 0.45;
+}
+
+.settings-mute {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: bold;
+  color: #c2577f;
+  cursor: pointer;
+}
+
+.settings-mute input {
+  width: 18px;
+  height: 18px;
+  accent-color: #ff8fb8;
+  cursor: pointer;
+}
