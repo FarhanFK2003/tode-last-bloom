@@ -15,6 +15,18 @@ body {
   user-select: none;
 }
 
+.hud {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font: bold 20px sans-serif;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  user-select: none;
+}
+
 .game-over {
   position: fixed;
   top: 50%;

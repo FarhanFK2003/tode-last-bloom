@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import './style.css';
-import { createPlayer, resetPlayer, updatePlayer } from './components/Player.js';
+import { PLAYER_START, createPlayer, getPlayerLives, hitPlayer, resetPlayer, updatePlayer } from './components/Player.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
 import { createAttack, resetAttack, updateAttack } from './components/Attack.js';
 import { createScore, getScore, resetScore, updateScore } from './components/Score.js';
 import { createGameOver, hideGameOver, showGameOver } from './components/GameOver.js';
 import { createMap } from './components/Map.js';
 import { createHouses } from './components/House.js';
+import { FLOWER_MAX_HEALTH, createFlower, damageFlower, getFlowerHealth, resetFlower } from './components/Flower.js';
+import { createHud, updateHud } from './components/Hud.js';
 import { createCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
@@ -40,16 +42,25 @@ const camera = createCamera();
 const map = createMap(MAP_SIZE, TILE_SIZE);
 scene.add(map);
 
+const flower = createFlower();
+scene.add(flower);
+
 const player = createPlayer();
 player.add(camera);
 scene.add(player);
 
-// Houses keep clear of Tode's start, his current spot, and the enemy spawn corners
-const houses = createHouses(map, MAP_SIZE, [new THREE.Vector2(0, 0), player.position, ...SPAWN_POINTS]);
+// Houses keep clear of the flower (origin), Tode's start, his current spot, and the enemy spawn corners
+const houses = createHouses(map, MAP_SIZE, [
+  new THREE.Vector2(0, 0),
+  PLAYER_START,
+  player.position,
+  ...SPAWN_POINTS,
+]);
 
 createAttack(player);
 createScore();
 createGameOver();
+createHud();
 
 const enemies = [];
 
@@ -92,6 +103,7 @@ function resetGame() {
   spawnTimer = 0;
 
   resetPlayer(player);
+  resetFlower();
   resetAttack();
   resetScore();
   hideGameOver();
@@ -100,7 +112,7 @@ function resetGame() {
   resetRequested = false;
 }
 
-// Returns true as soon as Tode and an enemy run into each other;
+// Returns true as soon as Tode loses his last life or the flower wilts;
 // Game Over then takes priority over everything else in the frame
 function updateGame(delta) {
   // Difficulty grows linearly with the score; enemy parameters scale faster than the player's
@@ -108,7 +120,8 @@ function updateGame(delta) {
   const enemyScale = 1 + difficulty;
   const playerScale = 1 + difficulty * PLAYER_SCALING_RATIO;
 
-  if (updatePlayer(player, delta, enemies, houses, playerScale)) return true;
+  // Running into a bee costs a life (hitPlayer ignores hits while Tode is invulnerable)
+  if (updatePlayer(player, delta, enemies, flower, houses, playerScale) && hitPlayer() === 0) return true;
 
   // Remove defeated enemies after collecting them, so the array isn't changed while it's iterated
   const defeated = updateAttack(player, enemies, delta, playerScale);
@@ -128,7 +141,9 @@ function updateGame(delta) {
   }
 
   for (const enemy of enemies) {
-    if (updateEnemy(enemy, player, delta, enemies, houses, enemyScale)) return true;
+    const result = updateEnemy(enemy, flower, player, delta, enemies, houses, enemyScale);
+    if (result === 'player' && hitPlayer() === 0) return true;
+    if (result === 'bite' && damageFlower(1) === 0) return true;
   }
 
   return false;
@@ -146,6 +161,8 @@ renderer.setAnimationLoop(() => {
   } else if (updateGame(delta)) {
     triggerGameOver();
   }
+
+  updateHud(getFlowerHealth(), FLOWER_MAX_HEALTH, getPlayerLives());
 
   renderer.render(scene, camera);
 });

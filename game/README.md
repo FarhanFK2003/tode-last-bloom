@@ -202,3 +202,7 @@ Possible edge cases, not observed in testing:
 - A house is skipped if no valid position is found within 100 attempts.
 - At very high speeds combined with a very slow frame, a single step could exceed the gap between objects.
   Within the current difficulty ceiling, the largest step (90 units/s × 0.1 s = 9) is well below a character's size.
+
+## Credits
+
+- Flower Single by Quaternius (CC0) via Poly Pizza: https://poly.pizza/m/GvfHo0roi3

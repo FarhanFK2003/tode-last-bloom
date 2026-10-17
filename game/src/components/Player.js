@@ -1,13 +1,20 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { computeCollisionRadius, hitsObstacle, isMoveBlocked } from '../collision.js';
+import { blocksMove, computeCollisionRadius, hitsObstacle, isMoveBlocked } from '../collision.js';
 
 const MODEL_PATH = '/models/tode.glb';
 const MODEL_SCALE = 20;
 
+// Tode starts in front of the flower, which stands at the origin
+export const PLAYER_START = new THREE.Vector2(0, -50);
+
 const MOVE_SPEED = 3; // hops per second
 const JUMP_DISTANCE = 20;
 const JUMP_HEIGHT = 8;
+
+const PLAYER_LIVES = 3;
+const INVULNERABILITY_TIME = 1.5; // seconds after a hit during which bees can't cost another life
+const BLINK_RATE = 10; // visibility toggles per second while invulnerable
 
 // Arrow keys move along the world axes (the ground is the XY plane)
 const DIRECTIONS = {
@@ -29,9 +36,12 @@ const movement = {
 let model = null;
 let modelGroundZ = 0;
 
+let lives = PLAYER_LIVES;
+let invulnerableTime = 0;
+
 export function createPlayer(onLoad) {
   const player = new THREE.Group();
-  player.position.set(0, 0, 0);
+  player.position.set(PLAYER_START.x, PLAYER_START.y, 0);
 
   new GLTFLoader().load(
     MODEL_PATH,
@@ -63,9 +73,11 @@ export function createPlayer(onLoad) {
   return player;
 }
 
-// Returns true when Tode's next position runs into an enemy. Houses only block the hop.
+// Returns true when Tode's next position runs into an enemy. The flower and houses only block the hop.
 // speedScale multiplies MOVE_SPEED as difficulty increases.
-export function updatePlayer(player, delta, enemies, houses, speedScale) {
+export function updatePlayer(player, delta, enemies, flower, houses, speedScale) {
+  updateInvulnerability(delta);
+
   if (movement.done && inputQueue.length > 0) {
     movement.direction = inputQueue.shift();
     movement.progress = 0;
@@ -93,8 +105,8 @@ export function updatePlayer(player, delta, enemies, houses, speedScale) {
     if (isMoveBlocked(player, nextX, nextY, enemies)) {
       movement.blocked = true;
       touchedEnemy = true;
-    } else if (hitsObstacle(player, nextX, nextY, houses)) {
-      // A house stops the hop but never ends the game
+    } else if (blocksMove(player, nextX, nextY, flower) || hitsObstacle(player, nextX, nextY, houses)) {
+      // The flower and houses stop the hop but never cost a life
       movement.blocked = true;
     } else {
       player.position.x = nextX;
@@ -114,6 +126,27 @@ export function updatePlayer(player, delta, enemies, houses, speedScale) {
   return touchedEnemy;
 }
 
+function updateInvulnerability(delta) {
+  invulnerableTime = Math.max(invulnerableTime - delta, 0);
+
+  // Blink the model, not the group, so the attached camera and attack circle stay visible
+  if (model) {
+    model.visible = invulnerableTime === 0 || Math.floor(invulnerableTime * BLINK_RATE) % 2 === 0;
+  }
+}
+
+// Costs one life unless Tode is still invulnerable from the previous hit. Returns the lives left.
+export function hitPlayer() {
+  if (invulnerableTime > 0) return lives;
+  lives -= 1;
+  invulnerableTime = INVULNERABILITY_TIME;
+  return lives;
+}
+
+export function getPlayerLives() {
+  return lives;
+}
+
 export function resetPlayer(player) {
   inputQueue.length = 0;
   movement.direction = null;
@@ -121,11 +154,15 @@ export function resetPlayer(player) {
   movement.done = true;
   movement.blocked = false;
 
-  player.position.set(0, 0, 0);
+  lives = PLAYER_LIVES;
+  invulnerableTime = 0;
+
+  player.position.set(PLAYER_START.x, PLAYER_START.y, 0);
   player.visible = true;
 
   if (model) {
     model.position.z = modelGroundZ;
     model.rotation.y = 0;
+    model.visible = true;
   }
 }
