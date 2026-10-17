@@ -29,7 +29,13 @@ const SPAWN_POINTS = [
   new THREE.Vector2(MAP_SIZE / 2, MAP_SIZE / 2),
   new THREE.Vector2(-MAP_SIZE / 2, MAP_SIZE / 2),
 ];
-const SPAWN_DELAY = 3; // seconds
+// Bee waves by elapsed survival time: how often a bee spawns, and how many may be active at once
+const WAVES = [
+  { start: 0, spawnInterval: 3.0, maxActive: 8 },
+  { start: 30, spawnInterval: 2.2, maxActive: 12 },
+  { start: 60, spawnInterval: 1.6, maxActive: 16 },
+  { start: 90, spawnInterval: 1.1, maxActive: 20 },
+];
 const MAX_DELTA = 0.1; // seconds; avoids huge jumps after the tab was hidden
 
 const DIFFICULTY_GROWTH_RATE = 0.005; // difficulty gained per score point
@@ -107,6 +113,17 @@ window.addEventListener('keydown', (event) => {
   resetRequested = true;
 });
 
+// The current wave follows from the survival timer, so it can never drift out of sync with it.
+// Once time has run out (victory), it stays on the last wave.
+function getWaveIndex() {
+  const elapsed = SURVIVAL_TIME - timeLeft;
+  let index = 0;
+  while (index + 1 < WAVES.length && elapsed >= WAVES[index + 1].start) {
+    index += 1;
+  }
+  return index;
+}
+
 function triggerGameOver(outcome) {
   gameOver = true;
   if (outcome === 'won') {
@@ -157,12 +174,15 @@ function updateGame(delta) {
   // Only enemies defeated by the attack earn kill points
   updateScore(delta, defeated.length);
 
-  // Spawning uses a timer accumulated from the shared delta; enemies appear more often as difficulty grows
-  const spawnDelay = SPAWN_DELAY / enemyScale;
-  spawnTimer += delta;
-  if (spawnTimer >= spawnDelay) {
-    spawnTimer -= spawnDelay;
-    spawnEnemy(SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)]);
+  // Spawning follows the current wave, independent of the score. The timer accumulates the shared delta,
+  // but pauses while the wave's cap of active bees is reached, so freeing several slots can't release a burst
+  const wave = WAVES[getWaveIndex()];
+  if (enemies.length < wave.maxActive) {
+    spawnTimer += delta;
+    if (spawnTimer >= wave.spawnInterval) {
+      spawnTimer -= wave.spawnInterval;
+      spawnEnemy(SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)]);
+    }
   }
 
   for (const enemy of enemies) {
@@ -198,6 +218,8 @@ renderer.setAnimationLoop(() => {
     flowerMaxHealth: FLOWER_MAX_HEALTH,
     lives: getPlayerLives(),
     timeLeft,
+    wave: getWaveIndex() + 1,
+    waveCount: WAVES.length,
   });
 
   renderer.render(scene, camera);

@@ -73,16 +73,24 @@ body {
   background: #ff6b8a;
 }
 
-.timer {
+.timer-box {
   position: fixed;
   top: 16px;
   right: 16px;
+  text-align: right;
   color: #fff;
-  font: bold 36px sans-serif;
-  font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   pointer-events: none;
   user-select: none;
+}
+
+.timer {
+  font: bold 36px sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.wave {
+  font: bold 18px sans-serif;
 }
 
 .game-over {

@@ -6,11 +6,12 @@ let healthFill = null;
 let healthValue = null;
 let lifePips = [];
 let timer = null;
+let waveLabel = null;
 
 // Last values written to the page, so it is only touched when something changes
-const shown = { flowerHealth: null, lives: null, seconds: null };
+const shown = { flowerHealth: null, lives: null, seconds: null, wave: null };
 
-// Top-left panel with the flower health bar and Tode's life pips, plus a timer at the top right
+// Top-left panel with the flower health bar and Tode's life pips, plus the timer and wave at the top right
 export function createHud(maxLives) {
   const panel = document.createElement('div');
   panel.className = 'hud';
@@ -34,10 +35,15 @@ export function createHud(maxLives) {
 
   panel.append(healthRow, livesRow);
 
+  const timerBox = document.createElement('div');
+  timerBox.className = 'timer-box';
   timer = document.createElement('div');
   timer.className = 'timer';
+  waveLabel = document.createElement('div');
+  waveLabel.className = 'wave';
+  timerBox.append(timer, waveLabel);
 
-  document.body.append(panel, timer);
+  document.body.append(panel, timerBox);
 }
 
 function createRow(label) {
@@ -50,7 +56,7 @@ function createRow(label) {
   return row;
 }
 
-export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft }) {
+export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave, waveCount }) {
   if (flowerHealth !== shown.flowerHealth) {
     shown.flowerHealth = flowerHealth;
     const ratio = flowerHealth / flowerMaxHealth;
@@ -70,5 +76,10 @@ export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft }) {
   if (seconds !== shown.seconds) {
     shown.seconds = seconds;
     timer.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  }
+
+  if (wave !== shown.wave) {
+    shown.wave = wave;
+    waveLabel.textContent = `Wave ${wave}/${waveCount}`;
   }
 }
