@@ -3,8 +3,9 @@
 A small 3D browser game built with [Three.js](https://threejs.org/) and [Vite](https://vite.dev/), extending the
 Tode the Frog project from the JetBrains Academy course "Build a Game with an AI Coding Agent".
 
-A magical flower grows at the centre of the garden. Bees spawn at the corners of the map and fly straight for it.
-Protect the flower for two minutes: keep the bees off it, and don't get caught yourself.
+A magical flower grows at the centre of the garden. Bees spawn at the corners of the map and fly straight for it,
+in four waves that grow more intense. Protect the flower for two minutes: keep the bees off it, and don't get
+caught yourself.
 
 ## How to play
 
@@ -19,6 +20,8 @@ Protect the flower for two minutes: keep the bees off it, and don't get caught y
   for 1 HP. A bee that loses contact starts its bite timer again.
 - **Tode** has 3 lives. Any contact with a bee, whether Tode hops into it or it flies into him, costs one life.
   He then blinks for 1.5 s, during which further contact costs nothing. Bees stay solid the whole time.
+- **Waves:** every 30 seconds a new [bee wave](#bee-waves) begins, spawning bees more often and allowing more of
+  them at once.
 - **Victory:** `THE FLOWER BLOOMED` when the 120-second timer runs out. Tode stays on screen and the final score
   is kept.
 - **Defeat:** `DEFEAT / The flower wilted` when the flower reaches 0 HP, or `DEFEAT / Tode was caught` when he
@@ -30,7 +33,8 @@ Protect the flower for two minutes: keep the bees off it, and don't get caught y
 - **Top left:** the flower health bar with its value (for example `20/20`), and one pip per life, filled for each
   life Tode has left. The bar is green above 50 %, yellow at or below 50 %, and red below 25 %.
 - **Top centre:** `Score: N`.
-- **Top right:** the survival timer, `m:ss`, counting down from `2:00`.
+- **Top right:** the survival timer, `m:ss`, counting down from `2:00`, with the current wave (`Wave N/4`) below it.
+  When the game ends, both keep their final values: `Wave 4/4` after a victory, the wave reached after a defeat.
 
 ## Running
 
@@ -49,13 +53,13 @@ Repository rules (`AGENTS.md`, `.junie/guidelines.md`): make changes in `game/` 
 
 ## Architecture
 
-`src/main.js` is the conductor. It creates the scene and lights, owns the enemy list, spawning, difficulty, the
-survival timer and the game state, and runs the single animation loop. Each file in `src/components/` builds one
+`src/main.js` is the conductor. It creates the scene and lights, owns the enemy list, the bee waves and spawning,
+difficulty, the survival timer and the game state, and runs the single animation loop. Each file in `src/components/` builds one
 part of the game and is wired together by `main.js`; components do not import each other.
 
 | File | Responsibility | Exports |
 |---|---|---|
-| `src/main.js` | Scene, lights, constants, enemy list and spawning, difficulty, timer, outcomes, reset, animation loop | — |
+| `src/main.js` | Scene, lights, constants, enemy list, bee waves and spawning, difficulty, timer, outcomes, reset, animation loop | — |
 | `src/collision.js` | Collision radius from model vertices; circle-vs-circle and circle-vs-rectangle move checks; sliding around obstacles | `COLLISION_DISTANCE`, `computeCollisionRadius`, `blocksMove`, `isMoveBlocked`, `hitsObstacle`, `slideAlongObstacle` |
 | `components/Renderer.js` | `WebGLRenderer` on `canvas.game` (transparent, antialiased, window-sized) | `createRenderer` |
 | `components/Camera.js` | Perspective camera, Z-up, looking at the origin | `createCamera` |
@@ -64,7 +68,7 @@ part of the game and is wired together by `main.js`; components do not import ea
 | `components/Enemy.js` | Bee model (loaded once, cloned per bee), flying to the flower, biting, enemy collision | `createEnemy`, `updateEnemy` |
 | `components/Attack.js` | Space input, cooldown, fading yellow circle, hit test | `createAttack`, `updateAttack`, `resetAttack` |
 | `components/Score.js` | Score value and `div.score` display | `createScore`, `updateScore`, `getScore`, `resetScore` |
-| `components/Hud.js` | Flower health bar, life pips and timer | `createHud`, `updateHud` |
+| `components/Hud.js` | Flower health bar, life pips, timer and wave | `createHud`, `updateHud` |
 | `components/GameOver.js` | `div.game-over` end screen, with a victory style | `createGameOver`, `showGameOver`, `hideGameOver` |
 | `components/Map.js` | Checkerboard floor (one plane with a canvas texture) | `createMap` |
 | `components/House.js` | House model, placement and ground footprints | `createHouses` |
@@ -88,7 +92,8 @@ so the game runs while models load.
       It returns `true` if Tode runs into a bee, and `main.js` calls `hitPlayer()`.
    3. `updateAttack` returns the bees hit by an attack this frame; `main.js` removes them from the scene and the list.
    4. `updateScore` adds survival time and kill points.
-   5. The spawn timer accumulates `delta` and spawns a bee at a random corner when it reaches the spawn delay.
+   5. Spawning for the current [bee wave](#bee-waves): while fewer bees are active than the wave's cap, the spawn
+      timer accumulates `delta` and spawns a bee at a random corner when it reaches the wave's spawn interval.
    6. `updateEnemy` for each bee. It returns `'player'` if the bee runs into Tode (→ `hitPlayer()`), `'bite'` when
       it lands a bite on the flower (→ `damageFlower(1)`), or `null`.
    7. The survival timer counts down by `delta`.
@@ -163,9 +168,36 @@ also blocked, the bee falls back to the same step along X only, then Y only.
   by `updateAttack`, not from enemy removal. The display shows `Score: N`, rounded down, and is only rewritten when
   that whole number changes.
 
+## Bee waves
+
+The round is split into four waves by elapsed time (`SURVIVAL_TIME − timeLeft`). The wave is worked out from the
+survival timer every time it is needed, so there is no separate wave counter that could drift out of sync, and
+restarting the timer also restarts the waves.
+
+| Wave | Elapsed time | Timer shows | Spawn interval | Max active bees |
+|---|---|---|---|---|
+| 1 | 0–30 s | `2:00`–`1:31` | 3.0 s | 8 |
+| 2 | 30–60 s | `1:30`–`1:01` | 2.2 s | 12 |
+| 3 | 60–90 s | `1:00`–`0:31` | 1.6 s | 16 |
+| 4 | 90–120 s | `0:30`–`0:00` | 1.1 s | 20 |
+
+- The game starts with one bee at each corner (4 bees), in wave 1.
+- **Spawn interval:** the spawn timer accumulates the shared `delta`. Each time it reaches the current wave's
+  interval, one bee spawns at a random corner and the interval is subtracted, keeping the rhythm.
+- **Cap:** while the number of active bees is at the wave's maximum, the spawn timer pauses. It resumes when an
+  attack frees a slot, continuing from where it stopped, so removing several bees at once doesn't release a burst.
+- **Wave changes** only change the interval and cap from then on. Because each interval is shorter than the one
+  before, a leftover timer can cause at most one spawn in the changing frame, after which the normal rhythm
+  continues.
+- When the game ends, the waves freeze with the timer: a defeat keeps the wave it happened in, and a victory shows
+  `Wave 4/4`.
+
+The waves alone decide how often bees spawn; the spawn interval is **not** scaled by the score-based difficulty
+below. Score-based difficulty still makes bees faster and Tode stronger.
+
 ## Difficulty
 
-Recalculated every frame from the raw score:
+Recalculated every frame from the raw score, and applied on top of the current wave:
 
 ```js
 difficulty  = min(score × DIFFICULTY_GROWTH_RATE, MAX_DIFFICULTY)
@@ -175,13 +207,13 @@ playerScale = 1 + difficulty × PLAYER_SCALING_RATIO   // 1 → 2
 
 | Parameter | Formula | Start → ceiling (score ≥ 400) |
 |---|---|---|
-| Spawn delay | `SPAWN_DELAY / enemyScale` | 3 s → 1 s |
 | Bee speed | `ENEMY_SPEED × enemyScale` | 30 → 90 units/s |
 | Hop speed | `MOVE_SPEED × playerScale` | 3 → 6 hops/s |
 | Attack cooldown | `ATTACK_COOLDOWN / playerScale` (set when an attack fires) | 1 s → 0.5 s |
 | Attack radius | `ATTACK_RADIUS × playerScale` | 30 → 60 |
 
-Survival alone earns 12 points in a full 120-second game, so difficulty rises mainly through kills.
+Survival alone earns 12 points in a full 120-second game, so difficulty rises mainly through kills. Spawning is
+controlled by the [bee waves](#bee-waves) instead.
 
 ## Constants
 
@@ -191,7 +223,7 @@ Survival alone earns 12 points in a full 120-second game, so difficulty rises ma
 | `MAP_SIZE` | `500` | `main.js` | Floor width and depth, centred on the origin |
 | `TILE_SIZE` | `20` | `main.js` | Checkerboard tile size (one hop) |
 | `SPAWN_POINTS` | `(±250, ±250)` | `main.js` | The four map corners |
-| `SPAWN_DELAY` | `3` s | `main.js` | Base time between spawns |
+| `WAVES` | see [Bee waves](#bee-waves) | `main.js` | Start time, spawn interval and active-bee cap of each wave |
 | `DIFFICULTY_GROWTH_RATE` | `0.005` | `main.js` | Difficulty per score point |
 | `MAX_DIFFICULTY` | `2` | `main.js` | Difficulty ceiling |
 | `PLAYER_SCALING_RATIO` | `0.5` | `main.js` | Player scaling relative to enemies |
@@ -234,7 +266,7 @@ After `MAX_PLACEMENT_ATTEMPTS` failures the house is skipped with a `console.war
 Pressing Space after any outcome runs `resetGame()`, which:
 
 - removes every bee, respawns one at each corner, and sets the spawn timer to 0;
-- sets the survival timer back to `SURVIVAL_TIME`;
+- sets the survival timer back to `SURVIVAL_TIME`, which also returns the game to wave 1;
 - calls `resetPlayer` (start position, 3 lives, no invulnerability, visible model, empty input queue, idle
   movement), `resetFlower` (20 HP), `resetAttack` (clears any pending press, cooldown and circle) and `resetScore`
   (0, so difficulty returns to baseline on the next frame);
