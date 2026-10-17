@@ -17,11 +17,69 @@ body {
 
 .hud {
   position: fixed;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 16px;
+  left: 16px;
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px;
   color: #fff;
-  font: bold 20px sans-serif;
+  font: bold 18px sans-serif;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hud-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hud-label {
+  width: 60px;
+}
+
+.health-bar {
+  width: 160px;
+  height: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 7px;
+}
+
+.health-fill {
+  height: 100%;
+  background: #3cb371;
+}
+
+.health-fill.warning {
+  background: #f2c94c;
+}
+
+.health-fill.danger {
+  background: #e5533d;
+}
+
+.life-pip {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+}
+
+.life-pip.filled {
+  background: #ff6b8a;
+}
+
+.timer {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  color: #fff;
+  font: bold 36px sans-serif;
+  font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   pointer-events: none;
   user-select: none;
@@ -56,4 +114,16 @@ body {
   margin: 0;
   font-size: 28px;
   color: #fff;
+}
+
+.game-over .message {
+  margin-bottom: 16px;
+}
+
+.game-over.victory {
+  border-color: #2e8b57;
+}
+
+.game-over.victory h1 {
+  color: #3cb371;
 }

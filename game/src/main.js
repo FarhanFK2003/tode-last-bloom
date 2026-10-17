@@ -1,6 +1,15 @@
 import * as THREE from 'three';
 import './style.css';
-import { PLAYER_START, createPlayer, getPlayerLives, hitPlayer, resetPlayer, updatePlayer } from './components/Player.js';
+import {
+  PLAYER_LIVES,
+  PLAYER_START,
+  createPlayer,
+  getPlayerLives,
+  hitPlayer,
+  resetPlayer,
+  showPlayerModel,
+  updatePlayer,
+} from './components/Player.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
 import { createAttack, resetAttack, updateAttack } from './components/Attack.js';
 import { createScore, getScore, resetScore, updateScore } from './components/Score.js';
@@ -26,6 +35,15 @@ const MAX_DELTA = 0.1; // seconds; avoids huge jumps after the tab was hidden
 const DIFFICULTY_GROWTH_RATE = 0.005; // difficulty gained per score point
 const MAX_DIFFICULTY = 2; // enemies reach x3, the player x2
 const PLAYER_SCALING_RATIO = 0.5; // player parameters grow at half the enemy rate
+
+const SURVIVAL_TIME = 120; // seconds Tode must protect the flower to win
+
+// End-screen text for each way a game can end
+const OUTCOMES = {
+  won: { title: 'THE FLOWER BLOOMED', message: 'You protected it for 2 minutes', victory: true },
+  flower: { title: 'DEFEAT', message: 'The flower wilted', victory: false },
+  caught: { title: 'DEFEAT', message: 'Tode was caught', victory: false },
+};
 
 const scene = new THREE.Scene();
 
@@ -60,7 +78,7 @@ const houses = createHouses(map, MAP_SIZE, [
 createAttack(player);
 createScore();
 createGameOver();
-createHud();
+createHud(PLAYER_LIVES);
 
 const enemies = [];
 
@@ -78,6 +96,7 @@ function removeEnemy(enemy) {
 SPAWN_POINTS.forEach((point) => spawnEnemy(point));
 let spawnTimer = 0;
 
+let timeLeft = SURVIVAL_TIME;
 let gameOver = false;
 let resetRequested = false;
 
@@ -88,10 +107,15 @@ window.addEventListener('keydown', (event) => {
   resetRequested = true;
 });
 
-function triggerGameOver() {
+function triggerGameOver(outcome) {
   gameOver = true;
-  player.visible = false;
-  showGameOver();
+  if (outcome === 'won') {
+    // Tode stays on screen for the victory, without being left mid-blink
+    showPlayerModel();
+  } else {
+    player.visible = false;
+  }
+  showGameOver(OUTCOMES[outcome]);
 }
 
 function resetGame() {
@@ -101,6 +125,7 @@ function resetGame() {
   enemies.length = 0;
   SPAWN_POINTS.forEach((point) => spawnEnemy(point));
   spawnTimer = 0;
+  timeLeft = SURVIVAL_TIME;
 
   resetPlayer(player);
   resetFlower();
@@ -112,8 +137,8 @@ function resetGame() {
   resetRequested = false;
 }
 
-// Returns true as soon as Tode loses his last life or the flower wilts;
-// Game Over then takes priority over everything else in the frame
+// Returns the outcome that ends the game this frame ('caught', 'flower' or 'won'), or null to keep playing.
+// A defeat ends the frame as soon as it happens; victory is checked last, so a defeat in the same frame wins.
 function updateGame(delta) {
   // Difficulty grows linearly with the score; enemy parameters scale faster than the player's
   const difficulty = Math.min(getScore() * DIFFICULTY_GROWTH_RATE, MAX_DIFFICULTY);
@@ -121,7 +146,7 @@ function updateGame(delta) {
   const playerScale = 1 + difficulty * PLAYER_SCALING_RATIO;
 
   // Running into a bee costs a life (hitPlayer ignores hits while Tode is invulnerable)
-  if (updatePlayer(player, delta, enemies, flower, houses, playerScale) && hitPlayer() === 0) return true;
+  if (updatePlayer(player, delta, enemies, flower, houses, playerScale) && hitPlayer() === 0) return 'caught';
 
   // Remove defeated enemies after collecting them, so the array isn't changed while it's iterated
   const defeated = updateAttack(player, enemies, delta, playerScale);
@@ -142,11 +167,15 @@ function updateGame(delta) {
 
   for (const enemy of enemies) {
     const result = updateEnemy(enemy, flower, player, delta, enemies, houses, enemyScale);
-    if (result === 'player' && hitPlayer() === 0) return true;
-    if (result === 'bite' && damageFlower(1) === 0) return true;
+    if (result === 'player' && hitPlayer() === 0) return 'caught';
+    if (result === 'bite' && damageFlower(1) === 0) return 'flower';
   }
 
-  return false;
+  // The survival timer only runs while playing, so it stops as soon as the game ends
+  timeLeft = Math.max(timeLeft - delta, 0);
+  if (timeLeft === 0) return 'won';
+
+  return null;
 }
 
 const clock = new THREE.Clock();
@@ -158,11 +187,18 @@ renderer.setAnimationLoop(() => {
   // While the game is over, nothing updates, but the frozen scene keeps rendering
   if (gameOver) {
     if (resetRequested) resetGame();
-  } else if (updateGame(delta)) {
-    triggerGameOver();
+  } else {
+    const outcome = updateGame(delta);
+    if (outcome) triggerGameOver(outcome);
   }
 
-  updateHud(getFlowerHealth(), FLOWER_MAX_HEALTH, getPlayerLives());
+  // Runs while frozen too, so the end screen keeps the final values
+  updateHud({
+    flowerHealth: getFlowerHealth(),
+    flowerMaxHealth: FLOWER_MAX_HEALTH,
+    lives: getPlayerLives(),
+    timeLeft,
+  });
 
   renderer.render(scene, camera);
 });

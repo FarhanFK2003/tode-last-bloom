@@ -12,7 +12,7 @@ const MOVE_SPEED = 3; // hops per second
 const JUMP_DISTANCE = 20;
 const JUMP_HEIGHT = 8;
 
-const PLAYER_LIVES = 3;
+export const PLAYER_LIVES = 3;
 const INVULNERABILITY_TIME = 1.5; // seconds after a hit during which bees can't cost another life
 const BLINK_RATE = 10; // visibility toggles per second while invulnerable
 
@@ -145,6 +145,11 @@ export function hitPlayer() {
 
 export function getPlayerLives() {
   return lives;
+}
+
+// Makes the model visible even if the game froze while it was blinking
+export function showPlayerModel() {
+  if (model) model.visible = true;
 }
 
 export function resetPlayer(player) {

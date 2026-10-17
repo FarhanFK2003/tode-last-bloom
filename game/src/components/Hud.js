@@ -1,16 +1,74 @@
-let element = null;
-let shownText = '';
+// The flower bar turns yellow at or below half health, and red below a quarter
+const WARNING_RATIO = 0.5;
+const DANGER_RATIO = 0.25;
 
-export function createHud() {
-  element = document.createElement('div');
-  element.className = 'hud';
-  document.body.appendChild(element);
+let healthFill = null;
+let healthValue = null;
+let lifePips = [];
+let timer = null;
+
+// Last values written to the page, so it is only touched when something changes
+const shown = { flowerHealth: null, lives: null, seconds: null };
+
+// Top-left panel with the flower health bar and Tode's life pips, plus a timer at the top right
+export function createHud(maxLives) {
+  const panel = document.createElement('div');
+  panel.className = 'hud';
+
+  const healthRow = createRow('Flower');
+  const healthBar = document.createElement('div');
+  healthBar.className = 'health-bar';
+  healthFill = document.createElement('div');
+  healthFill.className = 'health-fill';
+  healthBar.append(healthFill);
+  healthValue = document.createElement('span');
+  healthRow.append(healthBar, healthValue);
+
+  const livesRow = createRow('Lives');
+  lifePips = Array.from({ length: maxLives }, () => {
+    const pip = document.createElement('span');
+    pip.className = 'life-pip';
+    return pip;
+  });
+  livesRow.append(...lifePips);
+
+  panel.append(healthRow, livesRow);
+
+  timer = document.createElement('div');
+  timer.className = 'timer';
+
+  document.body.append(panel, timer);
 }
 
-export function updateHud(flowerHealth, flowerMaxHealth, lives) {
-  const text = `Flower ${flowerHealth}/${flowerMaxHealth} · Lives ${lives}`;
-  // Only touch the page when the text actually changes
-  if (text === shownText) return;
-  shownText = text;
-  element.textContent = text;
+function createRow(label) {
+  const row = document.createElement('div');
+  row.className = 'hud-row';
+  const labelElement = document.createElement('span');
+  labelElement.className = 'hud-label';
+  labelElement.textContent = label;
+  row.append(labelElement);
+  return row;
+}
+
+export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft }) {
+  if (flowerHealth !== shown.flowerHealth) {
+    shown.flowerHealth = flowerHealth;
+    const ratio = flowerHealth / flowerMaxHealth;
+    healthFill.style.width = `${ratio * 100}%`;
+    healthFill.classList.toggle('danger', ratio < DANGER_RATIO);
+    healthFill.classList.toggle('warning', ratio >= DANGER_RATIO && ratio <= WARNING_RATIO);
+    healthValue.textContent = `${flowerHealth}/${flowerMaxHealth}`;
+  }
+
+  if (lives !== shown.lives) {
+    shown.lives = lives;
+    lifePips.forEach((pip, index) => pip.classList.toggle('filled', index < lives));
+  }
+
+  // Round up, so the timer shows 2:00 at the start and 0:00 only when time has run out
+  const seconds = Math.ceil(timeLeft);
+  if (seconds !== shown.seconds) {
+    shown.seconds = seconds;
+    timer.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  }
 }
