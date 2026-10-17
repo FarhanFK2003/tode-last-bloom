@@ -13,27 +13,34 @@ caught yourself.
 |---|---|
 | Arrow keys | Hop one tile in that direction. Presses are queued and played in order; holding a key gives one hop. |
 | Space | Attack while playing (1 s base cooldown). Restart after the game ends. |
+| E | [Bloom Pulse](#bloom-pulse) while playing: push nearby bees away from the flower (15 s cooldown). |
 
 - **Objective:** survive until the timer reaches `0:00` while the flower still has health and Tode has at least
   one life.
 - **The flower** starts with 20 HP. Every bee pressed against it bites once per full second of continuous contact,
-  for 1 HP. A bee that loses contact starts its bite timer again.
-- **Tode** has 3 lives. Any contact with a bee, whether Tode hops into it or it flies into him, costs one life.
-  He then blinks for 1.5 s, during which further contact costs nothing. Bees stay solid the whole time.
+  for 1 HP. A bee that loses contact starts its bite timer again. The flower flashes red and flinches on every
+  bite, wilts toward brown as it loses health, and glows more warmly the longer you hold out
+  (see [Flower appearance](#flower-appearance)).
+- **Tode** has 3 lives. Contact with a bee, whether Tode hops into it or it flies into him, costs one life, except
+  with a bee that is being pushed back by the Bloom Pulse. After a hit he blinks for 1.5 s, during which further
+  contact costs nothing. Bees stay solid the whole time.
+- **Attack:** Space defeats every bee the yellow circle around Tode touches, for 10 points each.
+- **Bloom Pulse:** press E, from anywhere, to make the flower push every bee within 100 units of it away for half a
+  second. It doesn't kill bees or score points, and it recharges for 15 seconds.
 - **Waves:** every 30 seconds a new [bee wave](#bee-waves) begins, spawning bees more often and allowing more of
   them at once.
 - **Victory:** `THE FLOWER BLOOMED` when the 120-second timer runs out. Tode stays on screen and the final score
   is kept.
 - **Defeat:** `DEFEAT / The flower wilted` when the flower reaches 0 HP, or `DEFEAT / Tode was caught` when he
   loses his last life. Tode is hidden.
-- **The flower shows its state:** it flashes red and flinches on every bite, wilts toward brown as it loses
-  health, and glows more warmly the longer you hold out (see [Flower appearance](#flower-appearance)).
-- When the game ends, everything freezes and the HUD keeps its final values. Press Space to play again.
+- When the game ends, everything freezes and the HUD keeps its final values. Press Space to play again
+  (see [Restart](#restart)).
 
 ### HUD
 
 - **Top left:** the flower health bar with its value (for example `20/20`), and one pip per life, filled for each
-  life Tode has left. The bar is green above 50 %, yellow at or below 50 %, and red below 25 %.
+  life Tode has left. The bar is green above 50 %, yellow at or below 50 %, and red below 25 %. Below them,
+  `Pulse [E]` shows `Ready` (pink) or the seconds left before the pulse can be used again.
 - **Top centre:** `Score: N`.
 - **Top right:** the survival timer, `m:ss`, counting down from `2:00`, with the current wave (`Wave N/4`) below it.
   When the game ends, both keep their final values: `Wave 4/4` after a victory, the wave reached after a defeat.
@@ -51,26 +58,30 @@ npm run preview  # serve the production build
 Dependencies (`three`, `vite`) are declared in `game/package.json`. In this repository they are installed in the
 root `node_modules/`, which is where the scripts resolve them from; run `npm install` here if they are missing.
 
+The game has no automated tests; it is checked by playing it in the browser.
+
 Repository rules (`AGENTS.md`, `.junie/guidelines.md`): make changes in `game/` only, and don't look for or run tests.
 
 ## Architecture
 
 `src/main.js` is the conductor. It creates the scene and lights, owns the enemy list, the bee waves and spawning,
-difficulty, the survival timer and the game state, and runs the single animation loop. Each file in `src/components/` builds one
-part of the game and is wired together by `main.js`; components do not import each other.
+difficulty, the survival timer and the game state, and runs the single animation loop. Each file in
+`src/components/` builds one part of the game and is wired together by `main.js`; components do not import each
+other.
 
 | File | Responsibility | Exports |
 |---|---|---|
-| `src/main.js` | Scene, lights, constants, enemy list, bee waves and spawning, difficulty, timer, outcomes, reset, animation loop | — |
+| `src/main.js` | Scene, lights, constants, enemy list, bee waves and spawning, freeing removed bees, difficulty, timer, outcomes, reset, animation loop | — |
 | `src/collision.js` | Collision radius from model vertices; circle-vs-circle and circle-vs-rectangle move checks; sliding around obstacles | `COLLISION_DISTANCE`, `computeCollisionRadius`, `blocksMove`, `isMoveBlocked`, `hitsObstacle`, `slideAlongObstacle` |
-| `components/Renderer.js` | `WebGLRenderer` on `canvas.game` (transparent, antialiased, window-sized) | `createRenderer` |
-| `components/Camera.js` | Perspective camera, Z-up, looking at the origin | `createCamera` |
+| `components/Renderer.js` | `WebGLRenderer` on `canvas.game` (transparent, antialiased), sized to the window and resized with it | `createRenderer` |
+| `components/Camera.js` | Perspective camera, Z-up, looking at the origin; its aspect follows the window | `createCamera` |
 | `components/Flower.js` | Flower model at the origin, its health, and its hit flash, wilt and bloom | `FLOWER_MAX_HEALTH`, `createFlower`, `damageFlower`, `getFlowerHealth`, `updateFlower`, `resetFlower` |
 | `components/Player.js` | Tode model, arrow-key queue, hop movement, player collision, lives and invulnerability | `PLAYER_START`, `PLAYER_LIVES`, `createPlayer`, `updatePlayer`, `hitPlayer`, `getPlayerLives`, `showPlayerModel`, `resetPlayer` |
-| `components/Enemy.js` | Bee model (loaded once, cloned per bee), flying to the flower, biting, enemy collision | `createEnemy`, `updateEnemy` |
+| `components/Enemy.js` | Bee model (loaded once, cloned per bee), flying to the flower, biting, pulse pushback, enemy collision | `createEnemy`, `updateEnemy` |
 | `components/Attack.js` | Space input, cooldown, fading yellow circle, hit test | `createAttack`, `updateAttack`, `resetAttack` |
+| `components/Pulse.js` | E input, Bloom Pulse cooldown, marking bees for pushback, expanding pink ring | `createPulse`, `updatePulse`, `updatePulseVisual`, `getPulseCooldown`, `resetPulse` |
 | `components/Score.js` | Score value and `div.score` display | `createScore`, `updateScore`, `getScore`, `resetScore` |
-| `components/Hud.js` | Flower health bar, life pips, timer and wave | `createHud`, `updateHud` |
+| `components/Hud.js` | Flower health bar, life pips, pulse status, timer and wave | `createHud`, `updateHud` |
 | `components/GameOver.js` | `div.game-over` end screen, with a victory style | `createGameOver`, `showGameOver`, `hideGameOver` |
 | `components/Map.js` | Checkerboard floor (one plane with a canvas texture) | `createMap` |
 | `components/House.js` | House model, placement and ground footprints | `createHouses` |
@@ -79,6 +90,11 @@ part of the game and is wired together by `main.js`; components do not import ea
 Models are loaded asynchronously from `public/models/` (`tode.glb`, `enemy.glb`, `small_house.glb`,
 `flower_single.glb`). Each `create…` function returns its object immediately and adds the model when it arrives,
 so the game runs while models load.
+
+**Resources:** every bee is a copy of one loaded model. Copies share the model's geometry and materials but have
+their own skeletons, and the renderer gives each skeleton a small GPU texture. When a bee is removed (defeated by an
+attack, or cleared on restart), `disposeEnemy` in `main.js` disposes each of its skeletons once; the shared
+geometry and materials are left alone.
 
 ## Frame loop
 
@@ -91,22 +107,26 @@ so the game runs while models load.
 3. **Playing:** `updateGame(delta)` runs, in this order:
    1. Difficulty factors from the raw score (see [Difficulty](#difficulty)).
    2. `updatePlayer` starts the next queued hop or advances the current one, and counts down invulnerability.
-      It returns `true` if Tode runs into a bee, and `main.js` calls `hitPlayer()`.
-   3. `updateAttack` returns the bees hit by an attack this frame; `main.js` removes them from the scene and the list.
+      It returns `true` if Tode runs into a bee that isn't being pushed back, and `main.js` calls `hitPlayer()`.
+   3. `updateAttack` returns the bees hit by an attack this frame; `main.js` removes them from the scene and the
+      list, and frees their skeletons.
    4. `updateScore` adds survival time and kill points.
    5. Spawning for the current [bee wave](#bee-waves): while fewer bees are active than the wave's cap, the spawn
       timer accumulates `delta` and spawns a bee at a random corner when it reaches the wave's spawn interval.
-   6. `updateEnemy` for each bee. It returns `'player'` if the bee runs into Tode (→ `hitPlayer()`), `'bite'` when
-      it lands a bite on the flower (→ `damageFlower(1)`), or `null`.
-   7. The survival timer counts down by `delta`.
+   6. `updatePulse` counts down the pulse cooldown and, if E was pressed and the pulse is ready, marks every bee
+      within range for pushback.
+   7. `updateEnemy` for each bee. It returns `'player'` if the bee runs into Tode (→ `hitPlayer()`), `'bite'` when
+      it lands a bite on the flower (→ `damageFlower(1)`), or `null`. A bee being pushed back always returns `null`.
+   8. The survival timer counts down by `delta`.
 
    `updateGame` returns the outcome that ends the game, or `null`. A defeat returns as soon as it happens and
    skips the rest of the frame: `'caught'` when `hitPlayer()` leaves 0 lives, `'flower'` when `damageFlower(1)`
    leaves 0 HP. Victory (`'won'`) is checked last, when the timer reaches 0, so a defeat in the same frame wins.
    `triggerGameOver(outcome)` freezes the game, shows that outcome's end screen, and hides Tode on defeat (on
    victory it keeps him visible and stops his blinking).
-4. **Flower appearance:** `updateFlower(delta, progress)` runs every frame, including after the game ends. It is
-   visual only, so a hit flash can finish and the final wilt or bloom stays on the end screen.
+4. **Visual updates:** `updateFlower(delta, progress)` and `updatePulseVisual(delta)` run every frame, including
+   after the game ends. They are visual only, so a hit flash or pulse ring can finish and the final wilt or bloom
+   stays on the end screen.
 5. **HUD:** `updateHud` runs every frame, including after the game ends, and only rewrites the page when a shown
    value changes.
 6. **Render:** `renderer.render(scene, camera)` runs every frame, including after the game ends.
@@ -118,6 +138,8 @@ so the game runs while models load.
 - The flower stands at the origin. Tode starts at `PLAYER_START = (0, -50)`, in front of it.
 - The camera is a child of the player group, at `(300, -300, 300)` relative to Tode with `camera.up = (0, 0, 1)`,
   so it follows him automatically.
+- When the browser window is resized, `Renderer.js` resizes the renderer and `Camera.js` updates the camera's
+  aspect and projection, so the scene fills the window without stretching. The HUD uses fixed CSS positions.
 - Tode is a `Group` (moved on X/Y) holding the model. The **model** is turned to face the hop direction
   (`rotation.y`, which spins around world Z after the X rotation), raised for the hop arc
   (`sin(progress · π) · JUMP_HEIGHT`), and blinked while invulnerable. The group never rotates or rises, so the
@@ -144,11 +166,12 @@ next position is valid.
 
 | Situation | Result |
 |---|---|
-| Tode's hop runs into a bee | Costs a life (unless invulnerable); forward motion stops for the rest of that hop |
+| Tode's hop runs into a bee | Forward motion stops for the rest of that hop. Costs a life (unless invulnerable), but not if every bee in the way is being pushed back by the [Bloom Pulse](#bloom-pulse). |
 | A bee's step runs into Tode (Tode moving or not) | Costs a life (unless invulnerable); the bee stops touching, not inside |
 | A bee's step reaches the flower | The bee stays touching it and bites once per full second of contact |
 | Tode's hop runs into the flower or a house | Forward motion stops for the rest of that hop; the jump arc still finishes. No damage. |
 | A bee's step runs into another bee | The bee stays put this frame and still faces the flower |
+| A bee being pushed back by the Bloom Pulse runs into Tode, the flower or another bee | It stays put this frame. It never costs a life and never bites. |
 | A bee's step runs into a house | It slides along the house instead (see below) |
 
 Contact with Tode is checked before anything else, so a bee touching both Tode and the flower counts as touching
@@ -157,20 +180,43 @@ Tode. Houses never cost lives or health.
 **Getting around houses.** A bee first tries its direct step toward the flower. If a house blocks it,
 `slideAlongObstacle` finds the closest point of that house and returns the direction along its surface (at right
 angles to the line from that point) that best follows the bee's intended direction. At a flat wall this slides
-along the wall; at a corner it curves around the corner, so bees no longer get stuck on house corners. If that is
-also blocked, the bee falls back to the same step along X only, then Y only.
+along the wall; at a corner it curves around the corner, so bees don't get stuck on house corners. If that is
+also blocked, the bee falls back to the same step along X only, then Y only. Bees being pushed back by the Bloom
+Pulse use the same steps.
 
 ## Attack and score
 
 - Space sets a request flag; the attack happens in the loop if the cooldown is 0. Presses during the cooldown are
   discarded, not queued.
 - A bee is hit when `distance ≤ attackRadius + bee collision radius` (the circle touches its footprint). This
-  includes bees biting the flower.
+  includes bees biting the flower and bees being pushed back.
 - The circle is a child of the player group at `z = ATTACK_VISUAL_Z`. It is shown at 0.6 opacity, fades to 0 over
   `ATTACK_VISUAL_DURATION`, and is scaled to the current attack radius.
 - Score = survival time × `SCORE_PER_SECOND` + kills × `SCORE_PER_KILL`. Kills are counted from the bees returned
   by `updateAttack`, not from enemy removal. The display shows `Score: N`, rounded down, and is only rewritten when
   that whole number changes.
+
+## Bloom Pulse
+
+The game's one defensive ability, handled by `Pulse.js` and `Enemy.js`:
+
+- **Activation:** E (`KeyE`) while playing, from anywhere. Holding the key gives one pulse. A press during the
+  cooldown, or after the game has ended, is discarded, not saved for later.
+- **Effect:** every bee whose centre is within `PULSE_RADIUS` (100) of the flower is marked with
+  `userData.knockbackTime = KNOCKBACK_TIME` (0.5 s). Bees further away, and bees that spawn later, are not affected.
+- **Pushback:** while `knockbackTime` is above 0, `updateEnemy` moves the bee straight away from the flower at
+  `KNOCKBACK_SPEED` (140 units/s, about 70 units in total, independent of difficulty). The bee keeps facing the
+  flower, its bite timer is reset so it can't bite, and the step goes through the same house sliding and
+  collision checks as normal movement. When the time runs out, it chases the flower again.
+- **Harmless while pushed:** a pushed bee that runs into Tode, the flower or another bee just stops for that
+  frame, and if Tode hops into a pushed bee his hop is blocked. Neither costs a life.
+- **Cooldown:** `PULSE_COOLDOWN` (15 s), counted down by the shared `delta` only while playing. The pulse is ready
+  at the start of every game.
+- **Visual:** a pink ring (`#ff8fb8`) on the ground around the flower expands to `PULSE_RADIUS` and fades over
+  0.4 s. It is animated every frame, so a ring already expanding when the game ends finishes and disappears.
+- Bees are not killed, so the pulse awards no score and doesn't change the wave's active-bee count or spawn timer.
+- `resetPulse()` clears any pending press, makes the pulse ready and hides the ring. Restarting also replaces every
+  bee, so no pushback carries over.
 
 ## Flower appearance
 
@@ -215,7 +261,7 @@ restarting the timer also restarts the waves.
   before, a leftover timer can cause at most one spawn in the changing frame, after which the normal rhythm
   continues.
 - When the game ends, the waves freeze with the timer: a defeat keeps the wave it happened in, and a victory shows
-  `Wave 4/4`.
+  `Wave 4/4`. Restarting returns to wave 1 with 4 fresh bees.
 
 The waves alone decide how often bees spawn; the spawn interval is **not** scaled by the score-based difficulty
 below. Score-based difficulty still makes bees faster and Tode stronger.
@@ -238,7 +284,7 @@ playerScale = 1 + difficulty × PLAYER_SCALING_RATIO   // 1 → 2
 | Attack radius | `ATTACK_RADIUS × playerScale` | 30 → 60 |
 
 Survival alone earns 12 points in a full 120-second game, so difficulty rises mainly through kills. Spawning is
-controlled by the [bee waves](#bee-waves) instead.
+controlled by the [bee waves](#bee-waves) instead, and the Bloom Pulse is not affected by difficulty.
 
 ## Constants
 
@@ -267,6 +313,10 @@ controlled by the [bee waves](#bee-waves) instead.
 | `JUMP_HEIGHT` | `8` | `Player.js` | Hop arc height |
 | `ENEMY_SPEED` | `30` units/s | `Enemy.js` | Base bee speed |
 | `BITE_INTERVAL` | `1` s | `Enemy.js` | Continuous contact needed per 1 HP bite |
+| `KNOCKBACK_SPEED` | `140` units/s | `Enemy.js` | Pushback speed |
+| `PULSE_RADIUS` | `100` | `Pulse.js` | Bloom Pulse reach from the flower |
+| `PULSE_COOLDOWN` | `15` s | `Pulse.js` | Time before the pulse can be used again |
+| `KNOCKBACK_TIME` | `0.5` s | `Pulse.js` | How long a pulsed bee is pushed back |
 | `ATTACK_COOLDOWN` | `1` s | `Attack.js` | Base time between attacks |
 | `ATTACK_RADIUS` | `30` | `Attack.js` | Base attack reach |
 | `ATTACK_VISUAL_DURATION` | `0.25` s | `Attack.js` | Circle fade time |
@@ -294,11 +344,12 @@ After `MAX_PLACEMENT_ATTEMPTS` failures the house is skipped with a `console.war
 
 Pressing Space after any outcome runs `resetGame()`, which:
 
-- removes every bee, respawns one at each corner, and sets the spawn timer to 0;
+- removes every bee, frees its skeletons, respawns one at each corner, and sets the spawn timer to 0;
 - sets the survival timer back to `SURVIVAL_TIME`, which also returns the game to wave 1;
 - calls `resetPlayer` (start position, 3 lives, no invulnerability, visible model, empty input queue, idle
-  movement), `resetFlower` (20 HP and its original look), `resetAttack` (clears any pending press, cooldown and circle) and `resetScore`
-  (0, so difficulty returns to baseline on the next frame);
+  movement), `resetFlower` (20 HP and its original look), `resetAttack` (clears any pending press, cooldown and
+  circle), `resetPulse` (clears any pending press, pulse ready, ring hidden) and `resetScore` (0, so difficulty
+  returns to baseline on the next frame);
 - hides the end screen and removes its victory style.
 
 The Space press that restarts the game does not also attack: attacks only run while playing, and `resetAttack`
@@ -314,10 +365,10 @@ Current behaviour by design:
 - Houses only change on page reload, not on restart.
 - The victory message names 2 minutes; it does not change automatically if `SURVIVAL_TIME` does.
 - Difficulty stops increasing at a score of 400.
-- The window size is read only at startup; resizing the browser stretches the view until reload.
 - Bees are shown in a fixed pose (the model's animations are not played). The flower model has no animations or
   separate petals, so its reactions are whole-model tints, glow and height changes.
 - Collision is flat: Tode cannot hop over bees.
+- The Bloom Pulse pushes each bee straight away from the flower; bees blocked by other bees or houses move less.
 
 Possible edge cases, not observed in testing:
 
@@ -326,7 +377,8 @@ Possible edge cases, not observed in testing:
   model loads, its collision radius is 0.
 - A house is skipped if no valid position is found within 100 attempts.
 - At very high speeds combined with a very slow frame, a single step could exceed the gap between objects.
-  Within the current difficulty ceiling, the largest step (90 units/s × 0.1 s = 9) is well below a character's size.
+  Within the current difficulty ceiling, the largest step (90 units/s × 0.1 s = 9, or 14 for a pushed bee) is well
+  below a character's size.
 
 ## Credits
 
