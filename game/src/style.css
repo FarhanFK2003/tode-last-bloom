@@ -49,6 +49,23 @@ body {
   color: #ff8fb8;
 }
 
+.hud-row[hidden] {
+  display: none;
+}
+
+/* Co-op: wider labels for 'P1 Pulse [E]' / 'P2 Pulse [Q]', coloured like each player's attack circle */
+.hud.coop .hud-label {
+  width: 125px;
+}
+
+.hud.coop .hud-p1 .hud-label {
+  color: #ffff66;
+}
+
+.hud.coop .hud-p2 .hud-label {
+  color: #40e0d0;
+}
+
 .health-bar {
   width: 160px;
   height: 14px;

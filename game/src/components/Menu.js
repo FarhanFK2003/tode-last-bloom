@@ -11,7 +11,8 @@ let overlay = null;
 let panels = null;
 let current = 'main';
 
-// Main menu over the garden: Play, How to Play, Settings, and a small Credits link
+// Main menu over the garden: Play, How to Play, Settings, and a small Credits link.
+// Play asks for the mode and calls onPlay('single') or onPlay('coop').
 export function createMenu({ onPlay }) {
   overlay = document.createElement('div');
   overlay.className = 'menu-overlay';
@@ -23,10 +24,16 @@ export function createMenu({ onPlay }) {
     main: createPanel(
       createHeading('Tode: Last Bloom', 'h1'),
       createText('Protect the last flower of the garden.', 'menu-tagline'),
-      createButton('Play', onPlay),
+      createButton('Play', () => show('mode')),
       createButton('How to Play', () => show('howToPlay')),
       createButton('Settings', () => show('settings')),
       createButton('Credits', () => show('credits'), 'menu-link'),
+    ),
+    mode: createPanel(
+      createHeading('Choose mode'),
+      createButton('Single Player', () => onPlay('single')),
+      createButton('Two Player Co-op', () => onPlay('coop')),
+      createButton('Back', back),
     ),
     howToPlay: createPanel(
       createHeading('How to Play'),
@@ -35,9 +42,10 @@ export function createMenu({ onPlay }) {
       ),
       createControls(),
       createText(
-        'Every bee touching the flower bites it. The flower has 20 HP, Tode has 3 lives, and each touch from a bee ' +
-          'costs a life. A new, stronger wave of bees arrives every 30 seconds.',
+        'Every bee touching the flower bites it. The flower has 20 HP, and you have 3 lives (shared by both players ' +
+          'in co-op); each touch from a bee costs a life. A new, stronger wave of bees arrives every 30 seconds.',
       ),
+      createText('Some keyboards cannot register many keys at once, so a few key combinations may not work together.', 'menu-note'),
       createButton('Back', back),
     ),
     settings: createSettingsPanel(back),
@@ -56,9 +64,12 @@ function createControls() {
   const list = document.createElement('dl');
   list.className = 'menu-controls';
   for (const [keys, action] of [
-    ['Arrow keys', 'Hop'],
-    ['Space', 'Attack the bees around Tode'],
-    ['E', 'Bloom Pulse: push bees away from the flower'],
+    ['Arrow keys', 'Hop (Player 1)'],
+    ['Space', 'Attack the bees around Tode (Player 1)'],
+    ['E', 'Bloom Pulse: push bees away from the flower (Player 1)'],
+    ['W A S D', 'Hop (Player 2, co-op)'],
+    ['F', 'Attack (Player 2, co-op)'],
+    ['Q', 'Bloom Pulse (Player 2, co-op)'],
     ['Esc', 'Pause'],
   ]) {
     const term = document.createElement('dt');

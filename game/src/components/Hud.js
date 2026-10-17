@@ -7,14 +7,21 @@ let healthValue = null;
 let lifePips = [];
 let timer = null;
 let waveLabel = null;
-let pulseValue = null;
+let panel = null;
+// One row per player's Bloom Pulse; the second is only shown in co-op
+const pulseRows = [];
 
 // Last values written to the page, so it is only touched when something changes
-const shown = { flowerHealth: null, lives: null, seconds: null, wave: null, pulse: null };
+const shown = { flowerHealth: null, lives: null, seconds: null, wave: null, pulses: [] };
+
+const PULSE_LABELS = {
+  single: ['Pulse [E]'],
+  coop: ['P1 Pulse [E]', 'P2 Pulse [Q]'],
+};
 
 // Top-left panel with the flower health bar and Tode's life pips, plus the timer and wave at the top right
 export function createHud(maxLives) {
-  const panel = document.createElement('div');
+  panel = document.createElement('div');
   panel.className = 'hud';
 
   const healthRow = createRow('Flower');
@@ -34,12 +41,17 @@ export function createHud(maxLives) {
   });
   livesRow.append(...lifePips);
 
-  const pulseRow = createRow('Pulse [E]');
-  pulseValue = document.createElement('span');
-  pulseValue.className = 'pulse-value';
-  pulseRow.append(pulseValue);
+  for (const playerClass of ['p1', 'p2']) {
+    const row = createRow('');
+    row.classList.add(`hud-${playerClass}`);
+    const value = document.createElement('span');
+    value.className = 'pulse-value';
+    row.append(value);
+    pulseRows.push({ row, label: row.firstChild, value });
+  }
 
-  panel.append(healthRow, livesRow, pulseRow);
+  panel.append(healthRow, livesRow, ...pulseRows.map(({ row }) => row));
+  setHudMode('single');
 
   const timerBox = document.createElement('div');
   timerBox.className = 'timer-box';
@@ -62,7 +74,19 @@ function createRow(label) {
   return row;
 }
 
-export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave, waveCount, pulseCooldown }) {
+// 'single': one 'Pulse [E]' row, exactly as before. 'coop': coloured 'P1 Pulse [E]' and 'P2 Pulse [Q]' rows.
+export function setHudMode(mode) {
+  const labels = PULSE_LABELS[mode];
+  panel.classList.toggle('coop', mode === 'coop');
+  pulseRows.forEach(({ row, label }, index) => {
+    row.hidden = index >= labels.length;
+    label.textContent = labels[index] ?? '';
+  });
+  shown.pulses = [];
+}
+
+// pulseCooldowns: one value per active player, in player order
+export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave, waveCount, pulseCooldowns }) {
   if (flowerHealth !== shown.flowerHealth) {
     shown.flowerHealth = flowerHealth;
     const ratio = flowerHealth / flowerMaxHealth;
@@ -90,10 +114,11 @@ export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave
   }
 
   // 'Ready', or the whole seconds left on the cooldown, rounded up
-  const pulse = pulseCooldown > 0 ? `${Math.ceil(pulseCooldown)}s` : 'Ready';
-  if (pulse !== shown.pulse) {
-    shown.pulse = pulse;
-    pulseValue.textContent = pulse;
-    pulseValue.classList.toggle('ready', pulseCooldown === 0);
-  }
+  pulseCooldowns.forEach((cooldown, index) => {
+    const pulse = cooldown > 0 ? `${Math.ceil(cooldown)}s` : 'Ready';
+    if (pulse === shown.pulses[index]) return;
+    shown.pulses[index] = pulse;
+    pulseRows[index].value.textContent = pulse;
+    pulseRows[index].value.classList.toggle('ready', cooldown === 0);
+  });
 }

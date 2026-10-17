@@ -43,13 +43,16 @@ function loadTemplate() {
   return templatePromise;
 }
 
+const WHITE = new THREE.Color(0xffffff);
+
 // A player is a Group (moved on the ground) holding its own copy of the model.
 // Everything that belongs to one player lives in player.userData.state.
-export function createPlayer(start) {
+// tint (optional) recolours this player's copy only: its material is cloned first, so the shared
+// template, other players and the texture are untouched. tintStrength blends from white (0) to the tint (1).
+export function createPlayer(start, { tint = null, tintStrength = 1 } = {}) {
   const player = new THREE.Group();
   player.position.set(start.x, start.y, 0);
   player.userData.state = {
-    start: start.clone(),
     inputQueue: [],
     movement: {
       direction: null,
@@ -65,6 +68,15 @@ export function createPlayer(start) {
   loadTemplate()
     .then((template) => {
       const model = template.model.clone();
+      if (tint !== null) {
+        const color = WHITE.clone().lerp(new THREE.Color(tint), tintStrength);
+        model.traverse((object) => {
+          if (!object.isMesh) return;
+          // The texture stays shared; only the colour it is multiplied by changes
+          object.material = object.material.clone();
+          object.material.color.copy(color);
+        });
+      }
       player.userData.state.model = model;
       player.userData.state.modelGroundZ = model.position.z;
       player.userData.collisionRadius = template.collisionRadius;
@@ -81,9 +93,17 @@ export function queueHop(player, direction) {
   if (direction in DIRECTIONS) player.userData.state.inputQueue.push(DIRECTIONS[direction]);
 }
 
-// Returns true when this player's next position runs into an enemy. The flower and houses only block the hop.
+// Whether a player centred at (x, y) would reach past the square map boundary (half-size `bounds`)
+function isOutsideBounds(player, x, y, bounds) {
+  const limit = bounds - (player.userData.collisionRadius ?? 0);
+  return Math.abs(x) > limit || Math.abs(y) > limit;
+}
+
+// Returns true when this player's next position runs into an enemy. The flower, houses, other players
+// and the map boundary only block the hop.
 // speedScale multiplies MOVE_SPEED as difficulty increases; invulnerableTime (from Lives.js) drives the blinking.
-export function updatePlayer(player, delta, enemies, flower, houses, speedScale, invulnerableTime) {
+// players are all active players (this one is skipped); bounds is the map's half-size, or null for no limit.
+export function updatePlayer(player, delta, enemies, flower, houses, speedScale, invulnerableTime, players, bounds) {
   const { inputQueue, movement, model } = player.userData.state;
 
   // Blink the model, not the group, so the attached camera and attack circle stay visible
@@ -121,8 +141,14 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale,
       touchedEnemy = enemies.some(
         (enemy) => !(enemy.userData.knockbackTime > 0) && blocksMove(player, nextX, nextY, enemy),
       );
-    } else if (blocksMove(player, nextX, nextY, flower) || hitsObstacle(player, nextX, nextY, houses)) {
-      // The flower and houses stop the hop but never cost a life
+    } else if (
+      blocksMove(player, nextX, nextY, flower) ||
+      hitsObstacle(player, nextX, nextY, houses) ||
+      isMoveBlocked(player, nextX, nextY, players) ||
+      (bounds !== null && isOutsideBounds(player, nextX, nextY, bounds))
+    ) {
+      // The flower, houses, other players and the map boundary stop the hop but never cost a life.
+      // Players use the same overlap rule as everything else, so two overlapping players can always separate.
       movement.blocked = true;
     } else {
       player.position.x = nextX;
@@ -148,7 +174,8 @@ export function showPlayerModel(player) {
   if (model) model.visible = true;
 }
 
-export function resetPlayer(player) {
+// Back to a fresh state at `start` (each game mode has its own starting positions)
+export function resetPlayer(player, start) {
   const state = player.userData.state;
   state.inputQueue.length = 0;
   state.movement.direction = null;
@@ -156,7 +183,7 @@ export function resetPlayer(player) {
   state.movement.done = true;
   state.movement.blocked = false;
 
-  player.position.set(state.start.x, state.start.y, 0);
+  player.position.set(start.x, start.y, 0);
   player.visible = true;
 
   if (state.model) {

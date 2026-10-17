@@ -7,11 +7,11 @@ const ATTACK_VISUAL_OPACITY = 0.6;
 const ATTACK_VISUAL_Z = 0.25;
 const ATTACK_COLOR = 0xffff00;
 
-// Each player has its own attack: its own request, cooldown and circle
-export function createAttack(player) {
+// Each player has its own attack: its own request, cooldown and circle (in its own colour)
+export function createAttack(player, color = ATTACK_COLOR) {
   const circle = new THREE.Mesh(
     new THREE.CircleGeometry(ATTACK_RADIUS, 48),
-    new THREE.MeshBasicMaterial({ color: ATTACK_COLOR, transparent: true, opacity: 0, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false }),
   );
   // CircleGeometry already lies in the XY (ground) plane. Only the player's model hops,
   // never the group, so the circle follows Tode horizontally and stays at this height.

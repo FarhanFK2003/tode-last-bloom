@@ -23,7 +23,7 @@ import {
   resetFlower,
   updateFlower,
 } from './components/Flower.js';
-import { createHud, updateHud } from './components/Hud.js';
+import { createHud, setHudMode, updateHud } from './components/Hud.js';
 import {
   createPulse,
   createPulseAbility,
@@ -37,7 +37,7 @@ import {
 import { createInput, setGameplayEnabled } from './components/Input.js';
 import { createMenu, hideMenu, menuBack, showMenu } from './components/Menu.js';
 import { createPauseMenu, hidePauseMenu, pauseMenuBack, showPauseMenu } from './components/PauseMenu.js';
-import { createCamera } from './components/Camera.js';
+import { createCamera, getFramingZoom, placeCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 
 const MAP_SIZE = 500;
@@ -69,6 +69,15 @@ const OUTCOMES = {
   flower: { title: 'DEFEAT', message: 'The flower wilted', victory: false },
   caught: { title: 'DEFEAT', message: 'Tode was caught', victory: false },
 };
+const COOP_CAUGHT = { ...OUTCOMES.caught, message: 'The Todes were caught' };
+
+// Two-player co-op: starting spots either side of the single-player start, Player 2's look and attack colour,
+// and how quickly the camera eases its zoom (seconds)
+const COOP_STARTS = [new THREE.Vector2(-30, -50), new THREE.Vector2(30, -50)];
+const PLAYER_TWO_TINT = 0x40e0d0;
+const PLAYER_TWO_TINT_STRENGTH = 0.6;
+const PLAYER_TWO_ATTACK_COLOR = 0x40e0d0;
+const CAMERA_ZOOM_SMOOTHING = 0.25;
 
 const scene = new THREE.Scene();
 
@@ -92,19 +101,56 @@ scene.add(flower);
 createPulse(flower);
 
 // Everything one player owns: Tode's group (position, model, movement), its attack and its pulse ability
-function createPlayerSlot(start) {
-  const player = createPlayer(start);
-  scene.add(player);
-  return { player, attack: createAttack(player), pulse: createPulseAbility() };
+function createPlayerSlot(start, { tint, tintStrength, attackColor } = {}) {
+  const player = createPlayer(start, { tint, tintStrength });
+  return { player, attack: createAttack(player, attackColor), pulse: createPulseAbility() };
 }
 
-// The active players. Only one for now; playerGroups is what collision and bee contact checks use.
-const players = [createPlayerSlot(PLAYER_START)];
-const playerGroups = players.map((slot) => slot.player);
-const playerOne = players[0];
+// Both players are created once, when the game loads. Player 2 only joins the scene in co-op.
+const playerOne = createPlayerSlot(PLAYER_START);
+const playerTwo = createPlayerSlot(COOP_STARTS[1], {
+  tint: PLAYER_TWO_TINT,
+  tintStrength: PLAYER_TWO_TINT_STRENGTH,
+  attackColor: PLAYER_TWO_ATTACK_COLOR,
+});
+const allPlayers = [playerOne, playerTwo];
+scene.add(playerOne.player);
 
-// The camera follows Player 1, as before
-playerOne.player.add(camera);
+// 'single' | 'coop'. activePlayers are the slots in play; activeGroups is what collision and bee contact use.
+let gameMode = 'single';
+let activePlayers = [playerOne];
+let activeGroups = [playerOne.player];
+
+function setGameMode(mode) {
+  gameMode = mode;
+  activePlayers = mode === 'coop' ? allPlayers : [playerOne];
+  activeGroups = activePlayers.map((slot) => slot.player);
+  // Player 2 is only in the scene in co-op, so in single player it is never drawn, collided with or updated
+  if (mode === 'coop') scene.add(playerTwo.player);
+  else scene.remove(playerTwo.player);
+  setHudMode(mode);
+}
+
+function startPositions() {
+  return gameMode === 'coop' ? COOP_STARTS : [PLAYER_START];
+}
+
+// The camera looks at the players' midpoint. In single player that is Player 1 at zoom 1: exactly the view
+// it had when it was attached to Player 1. In co-op it zooms out just enough to keep both players on screen.
+let cameraZoom = 1;
+
+function updateCamera(delta, snap) {
+  const focusX = activeGroups.reduce((sum, player) => sum + player.position.x, 0) / activeGroups.length;
+  const focusY = activeGroups.reduce((sum, player) => sum + player.position.y, 0) / activeGroups.length;
+  const targetZoom = gameMode === 'coop' ? getFramingZoom(camera, focusX, focusY, activeGroups) : 1;
+
+  if (snap || gameMode !== 'coop') {
+    cameraZoom = targetZoom;
+  } else {
+    cameraZoom += (targetZoom - cameraZoom) * (1 - Math.exp(-delta / CAMERA_ZOOM_SMOOTHING));
+  }
+  placeCamera(camera, focusX, focusY, cameraZoom);
+}
 
 // Houses keep clear of the flower (origin), Tode's start, his current spot, and the enemy spawn corners
 const houses = createHouses(map, MAP_SIZE, [
@@ -115,10 +161,11 @@ const houses = createHouses(map, MAP_SIZE, [
 ]);
 
 createScore();
-createGameOver({ onRestart: startGame, onMainMenu: returnToMenu });
+// Restart keeps the current mode (the buttons pass a click event, so it isn't forwarded)
+createGameOver({ onRestart: () => startGame(), onMainMenu: returnToMenu });
 createHud(MAX_LIVES);
-createPauseMenu({ onResume: resume, onRestart: startGame, onMainMenu: returnToMenu });
-createMenu({ onPlay: startGame });
+createPauseMenu({ onResume: resume, onRestart: () => startGame(), onMainMenu: returnToMenu });
+createMenu({ onPlay: (mode) => startGame(mode) });
 
 const enemies = [];
 
@@ -174,6 +221,13 @@ createInput({
     ArrowRight: () => queueHop(playerOne.player, 'right'),
     Space: () => requestAttack(playerOne.attack),
     KeyE: () => requestPulse(playerOne.pulse),
+    // Player 2: only acts in co-op
+    KeyW: () => gameMode === 'coop' && queueHop(playerTwo.player, 'up'),
+    KeyS: () => gameMode === 'coop' && queueHop(playerTwo.player, 'down'),
+    KeyA: () => gameMode === 'coop' && queueHop(playerTwo.player, 'left'),
+    KeyD: () => gameMode === 'coop' && queueHop(playerTwo.player, 'right'),
+    KeyF: () => gameMode === 'coop' && requestAttack(playerTwo.attack),
+    KeyQ: () => gameMode === 'coop' && requestPulse(playerTwo.pulse),
   },
   ui: {
     Escape: handleEscape,
@@ -207,6 +261,7 @@ function resume() {
   setGameState('playing');
 }
 
+setGameMode('single');
 setGameState('menu');
 showMenu();
 
@@ -223,7 +278,7 @@ function getWaveIndex() {
 
 function endGame(outcome) {
   setGameState(outcome === 'won' ? 'victory' : 'defeat');
-  for (const { player } of players) {
+  for (const { player } of activePlayers) {
     if (outcome === 'won') {
       // Tode stays on screen for the victory, without being left mid-blink
       showPlayerModel(player);
@@ -231,7 +286,7 @@ function endGame(outcome) {
       player.visible = false;
     }
   }
-  showGameOver(OUTCOMES[outcome]);
+  showGameOver(outcome === 'caught' && gameMode === 'coop' ? COOP_CAUGHT : OUTCOMES[outcome]);
 }
 
 // Clears everything a run changes, back to the calm garden: no bees, full flower, Tode at the start.
@@ -245,20 +300,25 @@ function resetRun() {
   spawnTimer = 0;
   timeLeft = SURVIVAL_TIME;
 
-  for (const slot of players) {
-    resetPlayer(slot.player);
+  // Every player is reset, active or not, so nothing queued or cooling down carries into the next run.
+  // Player 2's spot only matters in co-op; in single player it is out of the scene.
+  const starts = startPositions();
+  allPlayers.forEach((slot, index) => {
+    resetPlayer(slot.player, starts[index] ?? COOP_STARTS[index]);
     resetAttack(slot.attack);
     resetPulse(slot.pulse);
-  }
+  });
   resetPulseRing();
   resetLives();
   resetFlower();
   resetScore();
   hideGameOver();
+  updateCamera(0, true);
 }
 
-// Starts a fresh run: from the main menu, the pause menu or an end screen
-function startGame() {
+// Starts a fresh run in the given mode (from the mode menu), or in the current mode (Restart)
+function startGame(mode = gameMode) {
+  setGameMode(mode);
   resetRun();
   SPAWN_POINTS.forEach((point) => spawnEnemy(point));
   hideMenu();
@@ -267,7 +327,9 @@ function startGame() {
   setGameState('playing');
 }
 
+// The menu always shows the single-player garden; the mode is chosen again when Play is pressed
 function returnToMenu() {
+  setGameMode('single');
   resetRun();
   hidePauseMenu();
   setGameState('menu');
@@ -285,16 +347,28 @@ function updateGame(delta) {
   // The invulnerability window counts down first, before any hit this frame (as it always has)
   updateLives(delta);
 
-  // Running into a bee costs a life (hitTeam ignores hits during the invulnerability window)
-  for (const { player } of players) {
-    const touchedEnemy = updatePlayer(player, delta, enemies, flower, houses, playerScale, getInvulnerableTime());
+  // Running into a bee costs a shared life (hitTeam ignores hits during the team's invulnerability window).
+  // Players block each other; in co-op the map edge also blocks them.
+  const bounds = gameMode === 'coop' ? MAP_SIZE / 2 : null;
+  for (const { player } of activePlayers) {
+    const touchedEnemy = updatePlayer(
+      player,
+      delta,
+      enemies,
+      flower,
+      houses,
+      playerScale,
+      getInvulnerableTime(),
+      activeGroups,
+      bounds,
+    );
     if (touchedEnemy && hitTeam() === 0) return 'caught';
   }
 
   // Collect every attack's defeated bees in a set, so a bee is never removed or scored twice,
   // then remove them after collecting, so the array isn't changed while it's iterated
   const defeated = new Set();
-  for (const { attack } of players) {
+  for (const { attack } of activePlayers) {
     for (const enemy of updateAttack(attack, enemies, delta, playerScale)) defeated.add(enemy);
   }
   for (const enemy of defeated) {
@@ -316,12 +390,12 @@ function updateGame(delta) {
   }
 
   // The bloom pulse marks bees near the flower for pushback before they move this frame
-  for (const { pulse } of players) {
+  for (const { pulse } of activePlayers) {
     updatePulse(pulse, delta, enemies, flower);
   }
 
   for (const enemy of enemies) {
-    const result = updateEnemy(enemy, flower, playerGroups, delta, enemies, houses, enemyScale);
+    const result = updateEnemy(enemy, flower, activeGroups, delta, enemies, houses, enemyScale);
     if (result === 'player' && hitTeam() === 0) return 'caught';
     if (result === 'bite' && damageFlower(1) === 0) return 'flower';
   }
@@ -353,6 +427,9 @@ renderer.setAnimationLoop(() => {
     updatePulseVisual(delta);
   }
 
+  // The camera follows the players; its co-op zoom only eases while playing, so it stays still when paused
+  updateCamera(gameState === 'playing' ? delta : 0, false);
+
   // Runs while frozen too, so the end screen keeps the final values
   updateHud({
     flowerHealth: getFlowerHealth(),
@@ -361,7 +438,7 @@ renderer.setAnimationLoop(() => {
     timeLeft,
     wave: getWaveIndex() + 1,
     waveCount: WAVES.length,
-    pulseCooldown: getPulseCooldown(playerOne.pulse),
+    pulseCooldowns: activePlayers.map((slot) => getPulseCooldown(slot.pulse)),
   });
 
   renderer.render(scene, camera);
