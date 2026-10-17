@@ -1,5 +1,6 @@
 // Small helpers shared by the menu screens (main menu, pause menu and end screen)
 
+import { playSound } from './components/Audio.js';
 import { getSettings, onSettingsChange, updateSettings } from './components/Settings.js';
 
 export function createButton(label, onClick, className = 'menu-button') {
@@ -7,7 +8,10 @@ export function createButton(label, onClick, className = 'menu-button') {
   button.type = 'button';
   button.className = className;
   button.textContent = label;
-  button.addEventListener('click', onClick);
+  button.addEventListener('click', (event) => {
+    playSound('click');
+    onClick(event);
+  });
   return button;
 }
 
@@ -70,7 +74,7 @@ export function createSettingsPanel(onBack) {
   return createPanel(
     createHeading('Settings'),
     controls,
-    createText('Audio coming soon: these preferences are saved for when music and sound effects arrive.', 'menu-note'),
+    createText('Changes apply straight away and are saved on this device.', 'menu-note'),
     createButton('Back', onBack),
   );
 }

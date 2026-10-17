@@ -1,5 +1,5 @@
 // Player preferences (music volume, sound-effects volume, mute), kept in memory and saved to localStorage.
-// There is no audio yet; these are stored so the audio system can read them when it arrives.
+// Audio.js reads them at start-up and follows every change through onSettingsChange.
 
 const STORAGE_KEY = 'tode-last-bloom:settings';
 const STORAGE_VERSION = 1;

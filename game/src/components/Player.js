@@ -63,6 +63,8 @@ export function createPlayer(start, { tint = null, tintStrength = 1 } = {}) {
     },
     model: null,
     modelGroundZ: 0,
+    // True for the one frame a hop starts moving (not when it is blocked straight away); used for its sound
+    hopStarted: false,
   };
 
   loadTemplate()
@@ -104,14 +106,17 @@ function isOutsideBounds(player, x, y, bounds) {
 // speedScale multiplies MOVE_SPEED as difficulty increases; invulnerableTime (from Lives.js) drives the blinking.
 // players are all active players (this one is skipped); bounds is the map's half-size, or null for no limit.
 export function updatePlayer(player, delta, enemies, flower, houses, speedScale, invulnerableTime, players, bounds) {
-  const { inputQueue, movement, model } = player.userData.state;
+  const state = player.userData.state;
+  const { inputQueue, movement, model } = state;
+  state.hopStarted = false;
 
   // Blink the model, not the group, so the attached camera and attack circle stay visible
   if (model) {
     model.visible = invulnerableTime === 0 || Math.floor(invulnerableTime * BLINK_RATE) % 2 === 0;
   }
 
-  if (movement.done && inputQueue.length > 0) {
+  const startedThisFrame = movement.done && inputQueue.length > 0;
+  if (startedThisFrame) {
     movement.direction = inputQueue.shift();
     movement.progress = 0;
     movement.done = false;
@@ -158,13 +163,14 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale,
 
   // Hop the model, not the group, so the attached camera stays steady
   if (model) {
-    model.position.z = player.userData.state.modelGroundZ + Math.sin(movement.progress * Math.PI) * JUMP_HEIGHT;
+    model.position.z = state.modelGroundZ + Math.sin(movement.progress * Math.PI) * JUMP_HEIGHT;
   }
 
   if (movement.progress === 1) {
     movement.done = true;
   }
 
+  state.hopStarted = startedThisFrame && !movement.blocked;
   return touchedEnemy;
 }
 
@@ -182,6 +188,7 @@ export function resetPlayer(player, start) {
   state.movement.progress = 0;
   state.movement.done = true;
   state.movement.blocked = false;
+  state.hopStarted = false;
 
   player.position.set(start.x, start.y, 0);
   player.visible = true;

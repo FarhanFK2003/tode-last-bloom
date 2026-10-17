@@ -28,9 +28,9 @@ export function createPulse(flower) {
   flower.add(ring);
 }
 
-// One player's pulse ability
+// One player's pulse ability. fired is true for the frame it actually goes off.
 export function createPulseAbility() {
-  return { requested: false, cooldown: 0 };
+  return { requested: false, fired: false, cooldown: 0 };
 }
 
 // Called by the central input handling, only while the game is being played
@@ -41,6 +41,7 @@ export function requestPulse(ability) {
 // Gameplay part: only runs while playing. A press during the cooldown is ignored, not saved for later.
 export function updatePulse(ability, delta, enemies, flower) {
   ability.cooldown = Math.max(ability.cooldown - delta, 0);
+  ability.fired = false;
 
   if (ability.requested && ability.cooldown === 0) {
     for (const enemy of enemies) {
@@ -51,6 +52,7 @@ export function updatePulse(ability, delta, enemies, flower) {
     }
     ability.cooldown = PULSE_COOLDOWN;
     ringTimeLeft = RING_DURATION;
+    ability.fired = true;
   }
   ability.requested = false;
 }
@@ -74,6 +76,7 @@ export function getPulseCooldown(ability) {
 // Resets one player's ability only; other players' abilities and the shared ring are untouched
 export function resetPulse(ability) {
   ability.requested = false;
+  ability.fired = false;
   ability.cooldown = 0;
 }
 

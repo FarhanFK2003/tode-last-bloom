@@ -39,6 +39,7 @@ import { createMenu, hideMenu, menuBack, showMenu } from './components/Menu.js';
 import { createPauseMenu, hidePauseMenu, pauseMenuBack, showPauseMenu } from './components/PauseMenu.js';
 import { createCamera, getFramingZoom, placeCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
+import { initAudio, playSound, setMusic, setMusicDucked } from './components/Audio.js';
 
 const MAP_SIZE = 500;
 const TILE_SIZE = 20;
@@ -103,7 +104,8 @@ createPulse(flower);
 // Everything one player owns: Tode's group (position, model, movement), its attack and its pulse ability
 function createPlayerSlot(start, { tint, tintStrength, attackColor } = {}) {
   const player = createPlayer(start, { tint, tintStrength });
-  return { player, attack: createAttack(player, attackColor), pulse: createPulseAbility() };
+  // pulseCooling remembers whether the pulse was cooling down last frame, for the "ready" chime
+  return { player, attack: createAttack(player, attackColor), pulse: createPulseAbility(), pulseCooling: false };
 }
 
 // Both players are created once, when the game loads. Player 2 only joins the scene in co-op.
@@ -251,6 +253,7 @@ function handleEscape() {
 
 function pause() {
   setGameState('paused');
+  setMusicDucked(true);
   showPauseMenu();
 }
 
@@ -258,11 +261,15 @@ function pause() {
 function resume() {
   hidePauseMenu();
   blurFocusedButton();
+  setMusicDucked(false);
   setGameState('playing');
 }
 
+// Audio starts with the first click or key press (browsers require it); the menu music begins then
+initAudio();
 setGameMode('single');
 setGameState('menu');
+setMusic('menu');
 showMenu();
 
 // The current wave follows from the survival timer, so it can never drift out of sync with it.
@@ -286,6 +293,9 @@ function endGame(outcome) {
       player.visible = false;
     }
   }
+  // The game music fades out and one ending tune plays instead
+  setMusic(null);
+  playSound(outcome === 'won' ? 'victory' : 'defeat');
   showGameOver(outcome === 'caught' && gameMode === 'coop' ? COOP_CAUGHT : OUTCOMES[outcome]);
 }
 
@@ -307,6 +317,7 @@ function resetRun() {
     resetPlayer(slot.player, starts[index] ?? COOP_STARTS[index]);
     resetAttack(slot.attack);
     resetPulse(slot.pulse);
+    slot.pulseCooling = false;
   });
   resetPulseRing();
   resetLives();
@@ -324,6 +335,10 @@ function startGame(mode = gameMode) {
   hideMenu();
   hidePauseMenu();
   blurFocusedButton();
+  // The game music always starts from its beginning, also on Restart
+  setMusicDucked(false);
+  setMusic('game', { restart: true });
+  playSound('start');
   setGameState('playing');
 }
 
@@ -333,7 +348,22 @@ function returnToMenu() {
   resetRun();
   hidePauseMenu();
   setGameState('menu');
+  setMusicDucked(false);
+  setMusic('menu');
   showMenu();
+}
+
+// Player 2's own action sounds are pitched slightly higher
+function soundPlayer(slot) {
+  return slot === playerTwo ? 2 : 1;
+}
+
+// Costs the team a life (unless invulnerable) and returns the lives left; the sound only plays on a real loss
+function damageTeam() {
+  const before = getLives();
+  const lives = hitTeam();
+  if (lives < before) playSound('hurt');
+  return lives;
 }
 
 // Returns the outcome that ends the game this frame ('caught', 'flower' or 'won'), or null to keep playing.
@@ -350,7 +380,8 @@ function updateGame(delta) {
   // Running into a bee costs a shared life (hitTeam ignores hits during the team's invulnerability window).
   // Players block each other; in co-op the map edge also blocks them.
   const bounds = gameMode === 'coop' ? MAP_SIZE / 2 : null;
-  for (const { player } of activePlayers) {
+  for (const slot of activePlayers) {
+    const { player } = slot;
     const touchedEnemy = updatePlayer(
       player,
       delta,
@@ -362,18 +393,22 @@ function updateGame(delta) {
       activeGroups,
       bounds,
     );
-    if (touchedEnemy && hitTeam() === 0) return 'caught';
+    if (player.userData.state.hopStarted) playSound('hop', { player: soundPlayer(slot) });
+    if (touchedEnemy && damageTeam() === 0) return 'caught';
   }
 
   // Collect every attack's defeated bees in a set, so a bee is never removed or scored twice,
   // then remove them after collecting, so the array isn't changed while it's iterated
   const defeated = new Set();
-  for (const { attack } of activePlayers) {
-    for (const enemy of updateAttack(attack, enemies, delta, playerScale)) defeated.add(enemy);
+  for (const slot of activePlayers) {
+    for (const enemy of updateAttack(slot.attack, enemies, delta, playerScale)) defeated.add(enemy);
+    if (slot.attack.fired) playSound('attack', { player: soundPlayer(slot) });
   }
   for (const enemy of defeated) {
     removeEnemy(enemy);
   }
+  // One pop for all the bees defeated this frame
+  if (defeated.size > 0) playSound('pop', { count: defeated.size });
 
   // Only enemies defeated by an attack earn kill points
   updateScore(delta, defeated.size);
@@ -390,14 +425,25 @@ function updateGame(delta) {
   }
 
   // The bloom pulse marks bees near the flower for pushback before they move this frame
-  for (const { pulse } of activePlayers) {
-    updatePulse(pulse, delta, enemies, flower);
+  // Both players pulsing in the same frame makes a single pulse sound. When a player's pulse
+  // comes off cooldown, a short chime plays once for that player.
+  let pulsed = false;
+  for (const slot of activePlayers) {
+    updatePulse(slot.pulse, delta, enemies, flower);
+    if (slot.pulse.fired) pulsed = true;
+    const cooling = getPulseCooldown(slot.pulse) > 0;
+    if (slot.pulseCooling && !cooling) playSound('pulseReady', { player: soundPlayer(slot) });
+    slot.pulseCooling = cooling;
   }
+  if (pulsed) playSound('pulse');
 
   for (const enemy of enemies) {
     const result = updateEnemy(enemy, flower, activeGroups, delta, enemies, houses, enemyScale);
-    if (result === 'player' && hitTeam() === 0) return 'caught';
-    if (result === 'bite' && damageFlower(1) === 0) return 'flower';
+    if (result === 'player' && damageTeam() === 0) return 'caught';
+    if (result === 'bite') {
+      playSound('bite');
+      if (damageFlower(1) === 0) return 'flower';
+    }
   }
 
   // The survival timer only runs while playing, so it stops as soon as the game ends

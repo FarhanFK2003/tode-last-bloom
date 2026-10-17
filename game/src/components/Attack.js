@@ -19,7 +19,8 @@ export function createAttack(player, color = ATTACK_COLOR) {
   circle.visible = false;
   player.add(circle);
 
-  return { player, requested: false, cooldown: 0, visualTimeLeft: 0, circle };
+  // fired is true for the frame the attack actually goes off (not when a press hits the cooldown)
+  return { player, requested: false, fired: false, cooldown: 0, visualTimeLeft: 0, circle };
 }
 
 // Called by the central input handling, only while the game is being played
@@ -36,6 +37,7 @@ export function updateAttack(attack, enemies, delta, scale) {
   const { player, circle } = attack;
   const radius = ATTACK_RADIUS * scale;
   const defeated = [];
+  attack.fired = false;
 
   // Presses during the cooldown are ignored, not saved for later
   if (attack.requested && attack.cooldown === 0) {
@@ -48,6 +50,7 @@ export function updateAttack(attack, enemies, delta, scale) {
     }
     attack.cooldown = ATTACK_COOLDOWN / scale;
     attack.visualTimeLeft = ATTACK_VISUAL_DURATION;
+    attack.fired = true;
   }
   attack.requested = false;
 
@@ -63,6 +66,7 @@ export function updateAttack(attack, enemies, delta, scale) {
 
 export function resetAttack(attack) {
   attack.requested = false;
+  attack.fired = false;
   attack.cooldown = 0;
   attack.visualTimeLeft = 0;
   attack.circle.visible = false;
