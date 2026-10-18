@@ -155,8 +155,9 @@ function chooseSpot(context) {
   return choices.length > 0 ? choices[Math.floor(Math.random() * choices.length)] : null;
 }
 
-function chooseType(canHeal) {
-  const types = ['shield', 'boost'];
+// Boost always; Shield unless the level leaves it out (the boss arena); Petal only while a life is missing
+function chooseType(canHeal, allowShield) {
+  const types = allowShield ? ['shield', 'boost'] : ['boost'];
   if (canHeal && !pickups.some((pickup) => pickup.type === 'petal')) types.push('petal');
   return types[Math.floor(Math.random() * types.length)];
 }
@@ -171,7 +172,7 @@ function trySpawn(context) {
   const spot = chooseSpot(context);
   if (!spot) return RETRY_DELAY;
 
-  const type = chooseType(context.canHeal());
+  const type = chooseType(context.canHeal(), context.allowShield);
   const { group, icon } = createPickupGroup(type);
   group.position.set(spot.x, spot.y, 0);
   scene.add(group);
@@ -180,7 +181,8 @@ function trySpawn(context) {
 }
 
 // Spawns, ages, animates and collects pickups. Returns what was collected this frame: [{ type, slot }].
-// context: { slots (active player slots, in player order), houses, flower, enemies, camera, canHeal() }.
+// context: { slots (active player slots, in player order), houses, flower, enemies, camera, canHeal(),
+// allowShield (false where Bloom Shield never appears) }.
 // Each pickup goes to the first player touching it and is removed at once, so it is only ever collected once.
 // A petal is left on the ground while the team already has every life.
 export function updatePickups(delta, context) {
@@ -202,7 +204,9 @@ export function updatePickups(delta, context) {
       const distance = Math.hypot(player.position.x - group.position.x, player.position.y - group.position.y);
       return distance < PICKUP_RADIUS + (player.userData.collisionRadius ?? 0);
     });
-    if (collector && (pickup.type !== 'petal' || context.canHeal())) {
+    const collectable =
+      (pickup.type !== 'petal' || context.canHeal()) && (pickup.type !== 'shield' || context.allowShield);
+    if (collector && collectable) {
       collected.push({ type: pickup.type, slot: collector });
       removePickup(pickup);
       continue;

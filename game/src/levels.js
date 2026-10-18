@@ -1,18 +1,25 @@
 // The game's levels, in play order. A run goes through them one after another; World.js builds each one's world.
 //   name:            shown in the HUD and on the level-complete screen
-//   groundColors:    the two alternating tile colours of the checkerboard ground ([dark, light])
+//   world:           which world the level is played in. Levels with the same world share one built world
+//                    (the Pond and the boss level); the world's look comes from the first level that names it.
+//   groundColors:    the ground's colours: [dark, light] tiles for a checkerboard, [base, patch, speckle] for a meadow
+//   groundPattern:   'checker' (the default) or 'meadow' (irregular moss patches)
 //   background:      sky colour behind the world, or null to keep the page showing through (the Garden, as before)
+//   light:           optional { sun, ambient } light colours for this level; white when not given
 //   features:        what the world places on and around its ground: obstacles and scenery (see World.js)
 //   mapEdge:         whether the map edge also blocks the player in single player (co-op always has it)
-//   duration:        seconds the flower must be protected to complete the level
+//   duration:        seconds the flower must be protected to complete the level, or null for a level with no
+//                    timer (the boss level, which isn't won by surviving)
 //   startDifficulty: difficulty at the start of the level; the score earned in the level adds to it (see main.js)
 //   waves:           bee waves by elapsed level time: how often a bee spawns, and how many may be active at once
+//                    (an empty list for no bees, not even the four that usually start a level)
 //   crabs:           Sand Crab schedule, separate from the bee waves, or null for none: the first appears `start`
 //                    seconds into the level, then one every `interval` seconds while fewer than `max` are active
 //                    (`coopMax` in co-op)
 //   octopus:         Ink Octopus schedule, or null for none: `start` is when the first octopus appears (its first
 //                    lob comes a little after it reaches its spot), then every `interval` seconds another appears
 //                    if fewer than `max` are active (the same in co-op)
+//   boss:            true on the boss level: Snapjaw the crocodile appears (see CrocodileBoss.js)
 
 // The original waves, unchanged, used by the Garden
 const GARDEN_WAVES = [
@@ -40,9 +47,21 @@ const POND_WAVES = [
   { start: 90, spawnInterval: 0.83, maxActive: 23 },
 ];
 
+// The Pond's world and look, shared by the Pond and the boss level
+const POND_WORLD = {
+  world: 'pond',
+  groundColors: ['#7BAE9B', '#93C4AE', '#5E9584'],
+  groundPattern: 'meadow',
+  background: '#3F6F60',
+  light: { sun: '#FFE0B0', ambient: '#DDEBFF' },
+  features: 'pond',
+  mapEdge: true,
+};
+
 export const LEVELS = [
   {
     name: 'Garden',
+    world: 'garden',
     groundColors: ['#228B22', '#90EE90'],
     background: null,
     features: 'houses',
@@ -55,6 +74,7 @@ export const LEVELS = [
   },
   {
     name: 'Coast',
+    world: 'coast',
     groundColors: ['#E2B866', '#F6E2B0'],
     background: '#BFE6FF',
     features: 'coast',
@@ -67,14 +87,22 @@ export const LEVELS = [
   },
   {
     name: 'Pond',
-    groundColors: ['#5E9E3E', '#A8D46F'],
-    background: '#D6F0E6',
-    features: 'pond',
-    mapEdge: true,
+    ...POND_WORLD,
     duration: 120,
     startDifficulty: 0.6,
     waves: POND_WAVES,
     crabs: { start: 20, interval: 25, max: 2, coopMax: 2 },
     octopus: { start: 45, interval: 30, max: 1 },
+  },
+  // The boss fight, in the Pond's own world (shared, not rebuilt). No timer and no bees for now.
+  {
+    name: 'Lagoon Boss',
+    ...POND_WORLD,
+    duration: null,
+    startDifficulty: 0.6,
+    waves: [],
+    crabs: null,
+    octopus: null,
+    boss: true,
   },
 ];

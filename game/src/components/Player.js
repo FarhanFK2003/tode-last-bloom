@@ -102,7 +102,8 @@ function isOutsideBounds(player, x, y, bounds) {
   return Math.abs(x) > limit || Math.abs(y) > limit;
 }
 
-// Returns true when this player's next position runs into an enemy. The flower, houses, other players
+// Returns true when this player's next position runs into an enemy. The flower (null where there is none, as in
+// the boss arena), houses, other players
 // and the map boundary only block the hop.
 // speedScale multiplies MOVE_SPEED as difficulty increases; invulnerableTime (from Lives.js) drives the blinking.
 // players are all active players (this one is skipped); bounds is the map's half-size, or null for no limit.
@@ -146,7 +147,7 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale,
       // Every enemy blocks the hop, but one pushed back by the bloom pulse or stunned is harmless
       touchedEnemy = enemies.some((enemy) => !isHarmless(enemy) && blocksMove(player, nextX, nextY, enemy));
     } else if (
-      blocksMove(player, nextX, nextY, flower) ||
+      (flower !== null && blocksMove(player, nextX, nextY, flower)) ||
       hitsObstacle(player, nextX, nextY, houses) ||
       isMoveBlocked(player, nextX, nextY, players) ||
       (bounds !== null && isOutsideBounds(player, nextX, nextY, bounds))

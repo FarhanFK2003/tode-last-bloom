@@ -476,6 +476,62 @@ const SOUNDS = {
       return 0.18;
     },
   },
+  // Snapjaw's roar as it rises from the lagoon: a low rumble with a breathy edge
+  bossRoar: {
+    minGap: 1,
+    maxVoices: 1,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 140, to: 70, duration: 0.9, volume: 0.12, type: 'sawtooth', attack: 0.08 });
+      tone(output, { time, from: 95, to: 55, duration: 0.9, volume: 0.1, attack: 0.08 });
+      whoosh(output, { time, frequency: 400, duration: 0.7, volume: 0.06 });
+      return 0.9;
+    },
+  },
+  // Snapjaw in the fight: a growl before a charge, a thud when it crashes, a hard tink when its armour turns an
+  // attack away, a crunchy bonk when a hit gets through, and a falling tune when it is defeated
+  bossWarn: {
+    minGap: 0.5,
+    maxVoices: 1,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 110, to: 150, duration: 0.6, volume: 0.1, type: 'sawtooth', attack: 0.05 });
+      return 0.6;
+    },
+  },
+  bossCrash: {
+    minGap: 0.3,
+    maxVoices: 1,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 120, to: 45, duration: 0.3, volume: 0.16 });
+      whoosh(output, { time, frequency: 300, duration: 0.25, volume: 0.12 });
+      return 0.3;
+    },
+  },
+  bossArmour: {
+    minGap: 0.08,
+    maxVoices: 2,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 2200, to: 2000, duration: 0.1, volume: 0.05, type: 'triangle' });
+      tone(output, { time, from: 3300, duration: 0.06, volume: 0.025 });
+      return 0.1;
+    },
+  },
+  bossHit: {
+    minGap: 0.08,
+    maxVoices: 2,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 300, to: 140, duration: 0.15, volume: 0.12, type: 'square' });
+      whoosh(output, { time, frequency: 1800, duration: 0.08, volume: 0.08 });
+      return 0.15;
+    },
+  },
+  bossDefeat: {
+    minGap: 1,
+    maxVoices: 1,
+    play: ({ time, output }) => {
+      notes(output, time, [67, 64, 60, 55], { spacing: 0.18, duration: 0.35, volume: 0.09, type: 'triangle' });
+      return 0.9;
+    },
+  },
   // A soft tink when the shield turns a bite away
   shieldBlock: {
     minGap: 0.15,

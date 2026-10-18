@@ -57,6 +57,14 @@ import { createMenu, hideMenu, menuBack, showMenu } from './components/Menu.js';
 import { createPauseMenu, hidePauseMenu, pauseMenuBack, showPauseMenu } from './components/PauseMenu.js';
 import { createCamera, getFramingZoom, placeCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
+import {
+  createCrocodileBoss,
+  getBossCollider,
+  getBossHud,
+  hitBoss,
+  resetBoss,
+  updateBoss,
+} from './components/CrocodileBoss.js';
 import { initAudio, playSound, setMusic, setMusicDucked } from './components/Audio.js';
 import {
   activateBoost,
@@ -143,6 +151,9 @@ createPowerUps(scene, flower);
 // The Ink Octopus's flying ink, warning rings and puddles go straight into the scene
 createInk(scene);
 
+// Snapjaw, the boss: built once, and only in the scene on the boss level
+createCrocodileBoss(scene);
+
 // Everything one player owns: Tode's group (position, model, movement), its attack, its pulse ability
 // and its Nectar Boost
 function createPlayerSlot(start, { tint, tintStrength, attackColor } = {}) {
@@ -203,23 +214,39 @@ function updateCamera(delta, snap) {
   placeCamera(camera, focusX, focusY, cameraZoom);
 }
 
-// Every level's world (ground and houses) is built once, when the game loads, and kept for the page session,
-// so each level's house layout stays the same between runs. Only the current level's world is in the scene.
+// Every world (ground and houses) is built once, when the game loads, and kept for the page session, so each
+// world's house layout stays the same between runs. Levels that name the same world share it (the Pond and the
+// boss level), so it is built only once. Only the current level's world is in the scene.
 // Houses keep clear of the flower (origin), Tode's start, his current spot, and the enemy spawn corners.
-const worlds = LEVELS.map((level) =>
-  createWorld(level, {
-    mapSize: MAP_SIZE,
-    tileSize: TILE_SIZE,
-    protectedPoints: [new THREE.Vector2(0, 0), PLAYER_START, playerOne.player.position, ...SPAWN_POINTS],
-  }),
-);
+const worlds = new Map();
+for (const level of LEVELS) {
+  if (worlds.has(level.world)) continue;
+  worlds.set(
+    level.world,
+    createWorld(level, {
+      mapSize: MAP_SIZE,
+      tileSize: TILE_SIZE,
+      protectedPoints: [new THREE.Vector2(0, 0), PLAYER_START, playerOne.player.position, ...SPAWN_POINTS],
+    }),
+  );
+}
+
+function worldOf(index) {
+  return worlds.get(LEVELS[index].world);
+}
 
 // The current level (an index into LEVELS) and the obstacles bees, players and pickups collide with in it
 let levelIndex = 0;
-let houses = worlds[0].obstacles;
+let houses = worldOf(0).obstacles;
 
 function currentLevel() {
   return LEVELS[levelIndex];
+}
+
+// How far through its timer the current level is, from 0 to 1 (always 0 on a level with no timer)
+function levelProgress() {
+  const { duration } = currentLevel();
+  return duration === null ? 0 : (duration - timeLeft) / duration;
 }
 
 function levelLabel(index) {
@@ -227,13 +254,20 @@ function levelLabel(index) {
 }
 
 // Swaps in a level's world and sky. Nothing is created or disposed: the worlds were all built at load.
+// Moving between two levels that share a world (Pond to boss) takes it out and puts the same one back.
 function enterLevel(index) {
-  scene.remove(worlds[levelIndex].group);
+  scene.remove(worldOf(levelIndex).group);
   levelIndex = index;
-  scene.add(worlds[index].group);
-  houses = worlds[index].obstacles;
-  const { background } = currentLevel();
+  scene.add(worldOf(index).group);
+  houses = worldOf(index).obstacles;
+  const { background, light } = currentLevel();
   scene.background = background ? new THREE.Color(background) : null;
+  // The boss arena has no flower: hiding its group also hides its pulse ring and shield dome. Leaving the arena
+  // shows it again; nothing is destroyed.
+  flower.visible = currentLevel().boss !== true;
+  // Each level's light colours (white unless the level sets its own); the brightness never changes
+  directionalLight.color.set(light?.sun ?? 0xffffff);
+  ambientLight.color.set(light?.ambient ?? 0xffffff);
 }
 
 // The score and lives the current level began with, given back by Restart Level.
@@ -361,9 +395,11 @@ createInput({
     Digit1: (event) => jumpToLevel(0, event),
     Digit2: (event) => jumpToLevel(1, event),
     Digit3: (event) => jumpToLevel(2, event),
+    Digit4: (event) => jumpToLevel(3, event),
     Numpad1: (event) => jumpToLevel(0, event),
     Numpad2: (event) => jumpToLevel(1, event),
     Numpad3: (event) => jumpToLevel(2, event),
+    Numpad4: (event) => jumpToLevel(3, event),
   },
 });
 
@@ -400,9 +436,10 @@ setMusic('menu');
 showMenu();
 
 // The current wave follows from the level timer, so it can never drift out of sync with it.
-// Once time has run out (level complete), it stays on the last wave.
+// Once time has run out (level complete), it stays on the last wave. A level with no timer stays on its first.
 function getWaveIndex() {
   const { duration, waves } = currentLevel();
+  if (duration === null) return 0;
   const elapsed = duration - timeLeft;
   let index = 0;
   while (index + 1 < waves.length && elapsed >= waves[index + 1].start) {
@@ -451,7 +488,7 @@ function resetLevel() {
   spawnTimer = 0;
   crabTimer = currentLevel().crabs?.start ?? 0;
   octopusTimer = currentLevel().octopus?.start ?? 0;
-  timeLeft = currentLevel().duration;
+  timeLeft = currentLevel().duration ?? 0; // a level with no timer never counts it down
 
   // Every player is reset, active or not, so nothing queued or cooling down carries into the next run.
   // Player 2's spot only matters in co-op; in single player it is out of the scene.
@@ -466,6 +503,10 @@ function resetLevel() {
   resetPulseRing();
   resetPowerUps();
   resetInk();
+  // Scenery animation back to its calm start (the Pond's ripples)
+  worldOf(levelIndex).reset();
+  // The boss is placed, sunk and ready for its intro, on the boss level, and removed everywhere else
+  resetBoss(currentLevel().boss === true, gameMode);
   resetLives(checkpoint.lives);
   resetFlower();
   resetScore(checkpoint.score);
@@ -476,7 +517,8 @@ function resetLevel() {
 // Plays the current level from its checkpoint
 function playLevel() {
   resetLevel();
-  SPAWN_POINTS.forEach((point) => spawnEnemy(point));
+  // The usual four starting bees, on levels that have bees at all
+  if (currentLevel().waves.length > 0) SPAWN_POINTS.forEach((point) => spawnEnemy(point));
   hideMenu();
   hidePauseMenu();
   blurFocusedButton();
@@ -554,6 +596,16 @@ function damageTeam() {
   return lives;
 }
 
+// A touch in the boss arena (by Snapjaw, or a player hopping into it). There, the Bloom Shield protects the
+// players instead of the (absent) flower: while it lasts, touches cost nothing. Returns the lives left.
+function damageTeamInArena() {
+  if (getShieldTime() > 0) {
+    playSound('shieldBlock');
+    return getLives();
+  }
+  return damageTeam();
+}
+
 // Applies one collected pickup. A petal is only collected while a life is missing, so healTeam succeeds.
 function applyPickup(type, slot) {
   if (type === 'shield') {
@@ -591,13 +643,18 @@ function updateGame(delta) {
   // Running into a bee costs a shared life (hitTeam ignores hits during the team's invulnerability window).
   // Players block each other; the map edge blocks them in co-op and on levels with a map edge.
   const bounds = gameMode === 'coop' || level.mapEdge ? MAP_SIZE / 2 : null;
+  // In the boss arena, Snapjaw's body joins the enemies the players bump into and attack (see CrocodileBoss.js),
+  // and there is no flower to bump into or to protect
+  const bossBody = getBossCollider();
+  const touchables = bossBody ? [...enemies, bossBody] : enemies;
+  const arenaFlower = level.boss ? null : flower;
   for (const slot of activePlayers) {
     const { player } = slot;
     const touchedEnemy = updatePlayer(
       player,
       delta,
-      enemies,
-      flower,
+      touchables,
+      arenaFlower,
       houses,
       // Nectar Boost (x1.5) and standing in ink (x0.6) only change hop speed. They are independent and
       // multiply (boost in ink: x0.9), and are worked out fresh every frame, so neither can build up or stick
@@ -607,7 +664,7 @@ function updateGame(delta) {
       bounds,
     );
     if (player.userData.state.hopStarted) playSound('hop', { player: soundPlayer(slot) });
-    if (touchedEnemy && damageTeam() === 0) return 'caught';
+    if (touchedEnemy && (level.boss ? damageTeamInArena() : damageTeam()) === 0) return 'caught';
   }
 
   // Each pickup goes to the first player touching it, once, even when both players reach it together
@@ -615,9 +672,11 @@ function updateGame(delta) {
     slots: activePlayers,
     houses,
     flower,
-    enemies,
+    enemies: touchables,
     camera,
     canHeal: () => getLives() < MAX_LIVES,
+    // The boss arena has no flower to shield: there, only Nectar Boost and Petal Burst appear
+    allowShield: !level.boss,
   });
   for (const { type, slot } of collected) {
     applyPickup(type, slot);
@@ -628,14 +687,24 @@ function updateGame(delta) {
   // Defeated enemies are removed after collecting, so the array isn't changed while it's iterated.
   const hits = new Set();
   for (const slot of activePlayers) {
-    for (const enemy of updateAttack(slot.attack, enemies, delta, playerScale)) hits.add(enemy);
+    for (const enemy of updateAttack(slot.attack, touchables, delta, playerScale)) hits.add(enemy);
     if (slot.attack.fired) playSound('attack', { player: soundPlayer(slot) });
   }
   const defeated = [];
   let cracked = false;
+  let bossDefeated = false;
   for (const enemy of hits) {
-    if (isCrab(enemy) && hitCrab(enemy) === 'cracked') cracked = true;
-    else defeated.push(enemy);
+    if (enemy === bossBody) {
+      // Snapjaw only takes damage while dizzy; otherwise its armour turns the hit away
+      const result = hitBoss();
+      if (result === 'armoured') playSound('bossArmour');
+      if (result === 'damaged') playSound('bossHit');
+      if (result === 'defeated') bossDefeated = true;
+    } else if (isCrab(enemy) && hitCrab(enemy) === 'cracked') {
+      cracked = true;
+    } else {
+      defeated.push(enemy);
+    }
   }
   for (const enemy of defeated) {
     removeEnemy(enemy);
@@ -643,15 +712,20 @@ function updateGame(delta) {
   // One pop for all the enemies defeated this frame
   if (defeated.length > 0) playSound('pop', { count: defeated.length });
   if (cracked) playSound('shellCrack');
+  // Snapjaw defeated: the fight stops and any bees left in the arena pop
+  if (bossDefeated) {
+    playSound('bossDefeat');
+    for (const enemy of [...enemies]) removeEnemy(enemy);
+  }
 
-  // Only enemies defeated by an attack earn kill points (a cracked shell earns nothing)
-  updateScore(delta, defeated.length);
+  // Only enemies defeated by an attack earn kill points (a cracked shell earns nothing; Snapjaw counts as one)
+  updateScore(delta, defeated.length + (bossDefeated ? 1 : 0));
 
   // Spawning follows the current wave, independent of the score. The timer accumulates the shared delta,
   // but pauses while the wave's cap of active bees is reached, so freeing several slots can't release a burst
   // Only bees count toward the wave's cap, so other enemies never take a bee's place
   const wave = level.waves[getWaveIndex()];
-  if (enemies.filter(isBee).length < wave.maxActive) {
+  if (wave && enemies.filter(isBee).length < wave.maxActive) {
     spawnTimer += delta;
     if (spawnTimer >= wave.spawnInterval) {
       spawnTimer -= wave.spawnInterval;
@@ -679,8 +753,9 @@ function updateGame(delta) {
   // The bloom pulse marks bees near the flower for pushback before they move this frame
   // Both players pulsing in the same frame makes a single pulse sound. When a player's pulse
   // comes off cooldown, a short chime plays once for that player.
+  // The pulse comes from the flower, so there is none in the boss arena.
   let pulsed = false;
-  for (const slot of activePlayers) {
+  for (const slot of level.boss ? [] : activePlayers) {
     updatePulse(slot.pulse, delta, enemies, flower);
     if (slot.pulse.fired) pulsed = true;
     const cooling = getPulseCooldown(slot.pulse) > 0;
@@ -690,11 +765,13 @@ function updateGame(delta) {
   if (pulsed) playSound('pulse');
 
   const enemyContext = { flower, players: activeGroups, enemies, houses, speedScale: enemyScale };
+  // Bees fly, so water (such as the Pond's lagoon) doesn't block them; everything else walks around it
+  const flyingObstacles = houses.filter((obstacle) => !obstacle.userData.water);
   for (const enemy of enemies) {
     let result;
     if (isCrab(enemy)) result = updateCrab(enemy, delta, { ...enemyContext, bounds: MAP_SIZE / 2 });
     else if (isOctopus(enemy)) result = updateOctopus(enemy, delta, enemyContext);
-    else result = updateEnemy(enemy, flower, activeGroups, delta, enemies, houses, enemyScale);
+    else result = updateEnemy(enemy, flower, activeGroups, delta, enemies, flyingObstacles, enemyScale);
     if (result === 'warn') playSound('crabClack');
     if (result === 'lob') playSound('inkLob');
     if (result === 'player' && damageTeam() === 0) return 'caught';
@@ -706,6 +783,18 @@ function updateGame(delta) {
       }
       playSound('bite');
       if (damageFlower(1) === 0) return 'flower';
+    }
+  }
+
+  // Snapjaw's fight. A touch while it is dangerous costs a shared life (the team's invulnerability stops
+  // repeated losses; the Bloom Shield turns it away entirely). Its defeat sequence ending wins the level.
+  if (bossBody) {
+    for (const event of updateBoss(delta, { players: activeGroups, obstacles: houses, bounds: MAP_SIZE / 2 })) {
+      if (event === 'roar') playSound('bossRoar');
+      if (event === 'warn') playSound('bossWarn');
+      if (event === 'crash') playSound('bossCrash');
+      if (event === 'gone') return 'won';
+      if (event === 'hitPlayer' && damageTeamInArena() === 0) return 'caught';
     }
   }
 
@@ -721,9 +810,12 @@ function updateGame(delta) {
     }
   }
 
-  // The survival timer only runs while playing, so it stops as soon as the game ends
-  timeLeft = Math.max(timeLeft - delta, 0);
-  if (timeLeft === 0) return 'won';
+  // The survival timer only runs while playing, so it stops as soon as the game ends.
+  // A level with no timer (the boss level) is never won by surviving.
+  if (level.duration !== null) {
+    timeLeft = Math.max(timeLeft - delta, 0);
+    if (timeLeft === 0) return 'won';
+  }
 
   return null;
 }
@@ -739,14 +831,15 @@ renderer.setAnimationLoop(() => {
   if (gameState === 'playing') {
     const outcome = updateGame(delta);
     if (outcome) endGame(outcome);
+    // The world's gentle scenery animation (the Pond's ripples and reeds) only moves while playing
+    worldOf(levelIndex).update(delta);
   }
 
   // Visual-only updates also run on the end screens, so a hit flash or pulse ring can finish and the final
   // wilt or bloom stays on screen. They stay frozen while paused and on the main menu.
   const ended = gameState === 'levelComplete' || gameState === 'victory' || gameState === 'defeat';
   if (gameState === 'playing' || ended) {
-    const { duration } = currentLevel();
-    updateFlower(delta, (duration - timeLeft) / duration);
+    updateFlower(delta, levelProgress());
     updatePulseVisual(delta);
   }
 
@@ -755,14 +848,17 @@ renderer.setAnimationLoop(() => {
 
   // Runs while frozen too, so the end screen keeps the final values
   updateHud({
-    flowerHealth: getFlowerHealth(),
+    // The boss arena has no flower and no Bloom Pulse, so their rows are hidden there
+    flowerHealth: currentLevel().boss ? null : getFlowerHealth(),
     flowerMaxHealth: FLOWER_MAX_HEALTH,
     lives: getLives(),
-    timeLeft,
-    wave: getWaveIndex() + 1,
+    // No timer or wave on a level without a timer; the boss's health bar instead
+    timeLeft: currentLevel().duration === null ? null : timeLeft,
+    wave: currentLevel().waves.length > 0 ? getWaveIndex() + 1 : null,
+    boss: getBossHud(),
     waveCount: currentLevel().waves.length,
     level: levelLabel(levelIndex),
-    pulseCooldowns: activePlayers.map((slot) => getPulseCooldown(slot.pulse)),
+    pulseCooldowns: currentLevel().boss ? null : activePlayers.map((slot) => getPulseCooldown(slot.pulse)),
     shieldTime: getShieldTime(),
     boostTimes: activePlayers.map((slot) => slot.boost.timeLeft),
   });
