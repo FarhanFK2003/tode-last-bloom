@@ -4,6 +4,7 @@ import {
   PLAYER_START,
   createPlayer,
   queueHop,
+  popPlayer,
   resetPlayer,
   showPlayerModel,
   updatePlayer,
@@ -17,7 +18,7 @@ import {
   resetLives,
   updateLives,
 } from './components/Lives.js';
-import { createEnemy, updateEnemy } from './components/Enemy.js';
+import { createEnemy, releaseEnemyAnimation, updateEnemy } from './components/Enemy.js';
 import { createCrab, hitCrab, isCrab, updateCrab } from './components/Crab.js';
 import {
   createInk,
@@ -297,6 +298,8 @@ function spawnEnemy(position) {
 // Each bee copy has its own skeletons (its geometry and materials are shared with the loaded template),
 // and the renderer gives every skeleton a small GPU texture, so free those when a bee goes away
 function disposeEnemy(enemy) {
+  // A bee's flight animation is stopped and released with it
+  releaseEnemyAnimation(enemy);
   const skeletons = new Set();
   enemy.traverse((object) => {
     if (object.isSkinnedMesh) skeletons.add(object.skeleton);
@@ -688,7 +691,10 @@ function updateGame(delta) {
   const hits = new Set();
   for (const slot of activePlayers) {
     for (const enemy of updateAttack(slot.attack, touchables, delta, playerScale)) hits.add(enemy);
-    if (slot.attack.fired) playSound('attack', { player: soundPlayer(slot) });
+    if (slot.attack.fired) {
+      playSound('attack', { player: soundPlayer(slot) });
+      popPlayer(slot.player);
+    }
   }
   const defeated = [];
   let cracked = false;

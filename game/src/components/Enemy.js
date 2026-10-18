@@ -7,9 +7,22 @@ const MODEL_PATH = '/models/enemy.glb';
 const MODEL_SCALE = 5;
 const ENEMY_SPEED = 30; // units per second
 
+// Flight animation (visual only): each bee plays the model's own Flying_Idle clip, switching to Fast_Flying while
+// the bloom pulse pushes it back, and its model bobs gently above the ground. The bee's group, which all
+// movement and collision use, never leaves the ground.
+const IDLE_CLIP = 'Flying_Idle';
+const FAST_CLIP = 'Fast_Flying';
+const CLIP_FADE = 0.15; // seconds to blend between the two
+const HOVER_LIFT = 2; // units the model floats above its resting height, on average
+const HOVER_BOB = 1.2; // units up and down around that
+const HOVER_SPEED = 3; // radians per second
+const GOLDEN_RATIO = 0.618034; // spreads the bees' starting phases evenly without repeating patterns
+
 // The model is loaded once and every enemy gets its own copy of it
 let modelPromise = null;
 let collisionRadius = 0;
+let clips = { idle: null, fast: null }; // found once in the loaded file
+let beesMade = 0; // gives each new bee its own, deterministic animation phase
 
 function loadModel() {
   if (!modelPromise) {
@@ -28,6 +41,9 @@ function loadModel() {
       model.position.z -= box.min.z;
 
       collisionRadius = computeCollisionRadius(model);
+      // The clip names carry the rig's prefix ('CharacterArmature|Flying_Idle'); fall back to the first clip
+      const named = (name) => gltf.animations.find((clip) => clip.name.endsWith(name)) ?? null;
+      clips = { idle: named(IDLE_CLIP) ?? gltf.animations[0] ?? null, fast: named(FAST_CLIP) };
       return model;
     });
   }
@@ -38,15 +54,63 @@ export function createEnemy(position) {
   const enemy = new THREE.Group();
   enemy.position.set(position.x, position.y, 0);
 
+  // Each bee starts its flapping and bobbing at its own point, so nearby bees don't move in step
+  const phase = (beesMade * GOLDEN_RATIO) % 1;
+  beesMade += 1;
+
   // The model is skinned, so it must be cloned with SkeletonUtils to get its own skeleton
   loadModel()
     .then((model) => {
       enemy.userData.collisionRadius = collisionRadius;
-      enemy.add(cloneSkinned(model));
+      const copy = cloneSkinned(model);
+      enemy.add(copy);
+      enemy.userData.flight = createFlight(copy, phase);
     })
     .catch((error) => console.error(`Failed to load ${MODEL_PATH}`, error));
 
   return enemy;
+}
+
+// This bee's own animation mixer and actions, and its hover bob
+function createFlight(model, phase) {
+  const flight = { model, restZ: model.position.z, bobTime: phase * ((Math.PI * 2) / HOVER_SPEED) };
+  if (!clips.idle) return flight;
+  flight.mixer = new THREE.AnimationMixer(model);
+  flight.idle = flight.mixer.clipAction(clips.idle);
+  flight.idle.time = phase * clips.idle.duration;
+  flight.idle.play();
+  flight.fast = clips.fast ? flight.mixer.clipAction(clips.fast) : null;
+  flight.fasting = false;
+  return flight;
+}
+
+// Advances a bee's flapping and bobbing; called from updateEnemy, so it stops whenever the game isn't playing
+function animateFlight(enemy, delta) {
+  const flight = enemy.userData.flight;
+  if (!flight) return;
+
+  // Faster wings while the bloom pulse pushes it back, then back to its idle flight
+  const pushed = enemy.userData.knockbackTime > 0;
+  if (flight.fast && pushed !== flight.fasting) {
+    flight.fasting = pushed;
+    const [from, to] = pushed ? [flight.idle, flight.fast] : [flight.fast, flight.idle];
+    to.reset().play();
+    from.crossFadeTo(to, CLIP_FADE, false);
+  }
+  flight.mixer?.update(delta);
+
+  flight.bobTime += delta;
+  flight.model.position.z = flight.restZ + HOVER_LIFT + Math.sin(flight.bobTime * HOVER_SPEED) * HOVER_BOB;
+}
+
+// Stops a bee's animation and lets go of its cached clip data; called when the bee is removed for good.
+// Safe for any enemy: the others have no flight animation.
+export function releaseEnemyAnimation(enemy) {
+  const flight = enemy.userData.flight;
+  if (!flight?.mixer) return;
+  flight.mixer.stopAllAction();
+  flight.mixer.uncacheRoot(flight.model);
+  enemy.userData.flight = null;
 }
 
 const BITE_INTERVAL = 1; // seconds of continuous contact with the flower per 1 HP bite
@@ -85,6 +149,8 @@ export function updateKnockback(enemy, flower, delta, { players, enemies, houses
 // 'bite' when it lands a bite on the flower, and null otherwise.
 // speedScale multiplies ENEMY_SPEED as difficulty increases.
 export function updateEnemy(enemy, flower, players, delta, enemies, houses, speedScale) {
+  animateFlight(enemy, delta);
+
   toTarget.set(flower.position.x - enemy.position.x, flower.position.y - enemy.position.y);
   const distance = toTarget.length();
   if (distance === 0) return null;

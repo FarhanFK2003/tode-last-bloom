@@ -15,6 +15,19 @@ const JUMP_HEIGHT = 8;
 
 const BLINK_RATE = 10; // visibility toggles per second while invulnerable
 
+// Visual animation of the model only (the group, which movement and collision use, is never scaled):
+// the model's local Y is the world's up axis, so scale.y is Tode's height and scale.x / scale.z its width.
+// A hop stretches Tode a little in the air and squashes it briefly on landing; when still, it breathes;
+// an attack makes it pop. Every effect eases in and out, so the scale never jumps.
+const HOP_STRETCH = 0.08; // taller by this fraction at the top of a hop (and a little thinner)
+const LAND_TIME = 0.14; // seconds of the landing squash
+const LAND_SQUASH = 0.12; // shorter by this fraction at its deepest (and a little wider)
+const BREATH_SPEED = 2.2; // radians per second
+const BREATH_SIZE = 0.03;
+const BREATH_EASE = 6; // how quickly breathing fades in when Tode stops and out when it hops (per second)
+const POP_TIME = 0.18; // seconds of the attack pop
+const POP_SIZE = 0.1;
+
 // Hop directions along the world axes (the ground is the XY plane)
 const DIRECTIONS = {
   up: new THREE.Vector2(0, 1),
@@ -64,6 +77,8 @@ export function createPlayer(start, { tint = null, tintStrength = 1 } = {}) {
     },
     model: null,
     modelGroundZ: 0,
+    // Visual pose (see poseModel): hop height, landing squash and attack pop timers, breathing
+    pose: { hopHeight: 0, landTime: 0, popTime: 0, breathTime: 0, breathWeight: 1 },
     // True for the one frame a hop starts moving (not when it is blocked straight away); used for its sound
     hopStarted: false,
   };
@@ -131,7 +146,10 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale,
     }
   }
 
-  if (movement.done) return false;
+  if (movement.done) {
+    poseModel(state, delta);
+    return false;
+  }
 
   movement.progress = Math.min(movement.progress + MOVE_SPEED * speedScale * delta, 1);
   let touchedEnemy = false;
@@ -161,17 +179,48 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale,
     }
   }
 
-  // Hop the model, not the group, so the attached camera stays steady
-  if (model) {
-    model.position.z = state.modelGroundZ + Math.sin(movement.progress * Math.PI) * JUMP_HEIGHT;
-  }
+  // Hop the model, not the group, so the attached camera stays steady (applied in poseModel)
+  state.pose.hopHeight = Math.sin(movement.progress * Math.PI) * JUMP_HEIGHT;
 
   if (movement.progress === 1) {
     movement.done = true;
+    state.pose.hopHeight = 0;
+    state.pose.landTime = LAND_TIME;
   }
 
   state.hopStarted = startedThisFrame && !movement.blocked;
+  poseModel(state, delta);
   return touchedEnemy;
+}
+
+// An attack just fired: a quick visual pop (the attack itself is unchanged)
+export function popPlayer(player) {
+  player.userData.state.pose.popTime = POP_TIME;
+}
+
+// Applies the visual pose to the model: hop height, stretch in the air, landing squash, breathing and the
+// attack pop. Only runs from updatePlayer, so it freezes whenever the game isn't playing.
+function poseModel(state, delta) {
+  const { model, movement, pose } = state;
+  pose.landTime = Math.max(pose.landTime - delta, 0);
+  pose.popTime = Math.max(pose.popTime - delta, 0);
+  pose.breathTime += delta;
+  const resting = movement.done && pose.landTime === 0;
+  pose.breathWeight += ((resting ? 1 : 0) - pose.breathWeight) * Math.min(BREATH_EASE * delta, 1);
+  if (!model) return;
+
+  // Each effect rises and falls smoothly: a sine over its own span
+  const stretch = movement.done ? 0 : Math.sin(movement.progress * Math.PI) * HOP_STRETCH;
+  const squash = Math.sin((1 - pose.landTime / LAND_TIME) * Math.PI) * (pose.landTime > 0 ? LAND_SQUASH : 0);
+  const breath = Math.sin(pose.breathTime * BREATH_SPEED) * BREATH_SIZE * pose.breathWeight;
+  const pop = Math.sin((1 - pose.popTime / POP_TIME) * Math.PI) * (pose.popTime > 0 ? POP_SIZE : 0);
+
+  const height = (1 + stretch) * (1 - squash) * (1 + breath) * (1 + pop);
+  const width = (1 - stretch * 0.5) * (1 + squash * 0.5) * (1 - breath * 0.5) * (1 + pop);
+  model.scale.set(MODEL_SCALE * width, MODEL_SCALE * height, MODEL_SCALE * width);
+  // The model is lifted by modelGroundZ at full height; scaling its height scales that lift, so its feet stay
+  // on the ground, and the hop height is added on top
+  model.position.z = state.modelGroundZ * height + pose.hopHeight;
 }
 
 // Makes the model visible even if the game froze while it was blinking
@@ -189,12 +238,14 @@ export function resetPlayer(player, start) {
   state.movement.done = true;
   state.movement.blocked = false;
   state.hopStarted = false;
+  Object.assign(state.pose, { hopHeight: 0, landTime: 0, popTime: 0, breathTime: 0, breathWeight: 1 });
 
   player.position.set(start.x, start.y, 0);
   player.visible = true;
 
   if (state.model) {
     state.model.position.z = state.modelGroundZ;
+    state.model.scale.setScalar(MODEL_SCALE);
     state.model.rotation.y = 0;
     state.model.visible = true;
   }
