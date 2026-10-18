@@ -18,11 +18,21 @@ import {
   updateLives,
 } from './components/Lives.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
+import { createCrab, hitCrab, isCrab, updateCrab } from './components/Crab.js';
+import {
+  createInk,
+  getInkSlow,
+  isOctopus,
+  resetInk,
+  spawnOctopus,
+  updateInk,
+  updateOctopus,
+} from './components/Octopus.js';
 import { createAttack, requestAttack, resetAttack, updateAttack } from './components/Attack.js';
 import { createScore, getScore, resetScore, updateScore } from './components/Score.js';
 import { createGameOver, hideGameOver, showGameOver } from './components/GameOver.js';
-import { createMap } from './components/Map.js';
-import { createHouses } from './components/House.js';
+import { createWorld } from './components/World.js';
+import { LEVELS } from './levels.js';
 import {
   FLOWER_MAX_HEALTH,
   createFlower,
@@ -70,26 +80,34 @@ const SPAWN_POINTS = [
   new THREE.Vector2(MAP_SIZE / 2, MAP_SIZE / 2),
   new THREE.Vector2(-MAP_SIZE / 2, MAP_SIZE / 2),
 ];
-// Bee waves by elapsed survival time: how often a bee spawns, and how many may be active at once
-const WAVES = [
-  { start: 0, spawnInterval: 3.0, maxActive: 8 },
-  { start: 30, spawnInterval: 2.2, maxActive: 12 },
-  { start: 60, spawnInterval: 1.6, maxActive: 16 },
-  { start: 90, spawnInterval: 1.1, maxActive: 20 },
+// Sand Crabs come in from just inside the middle of each map edge, away from the bees' corners.
+// A spot is only used while it is clear of obstacles, players and other enemies.
+const CRAB_SPAWN_POINTS = [
+  new THREE.Vector2(0, -MAP_SIZE / 2 + 25),
+  new THREE.Vector2(MAP_SIZE / 2 - 25, 0),
+  new THREE.Vector2(0, MAP_SIZE / 2 - 25),
+  new THREE.Vector2(-MAP_SIZE / 2 + 25, 0),
 ];
+const CRAB_SPAWN_CLEARANCE = { obstacle: 30, player: 80, enemy: 30 };
+const CRAB_RETRY_DELAY = 1; // seconds before trying again when no spawn spot is free
+const OCTOPUS_RETRY_DELAY = 1; // likewise for the Ink Octopus
 const MAX_DELTA = 0.1; // seconds; avoids huge jumps after the tab was hidden
 
-const DIFFICULTY_GROWTH_RATE = 0.005; // difficulty gained per score point
+const DIFFICULTY_GROWTH_RATE = 0.005; // difficulty gained per score point earned in the current level
 const MAX_DIFFICULTY = 2; // enemies reach x3, the player x2
 const PLAYER_SCALING_RATIO = 0.5; // player parameters grow at half the enemy rate
 
-const SURVIVAL_TIME = 120; // seconds Tode must protect the flower to win
-
-// End-screen text for each way a game can end
+// End-screen text for each way a run can end. Completing a level that isn't the last shows the
+// level-complete screen instead (see endGame). `action` picks the end screen's main button.
 const OUTCOMES = {
-  won: { title: 'THE FLOWER BLOOMED', message: 'You protected it for 2 minutes', victory: true },
-  flower: { title: 'DEFEAT', message: 'The flower wilted', victory: false },
-  caught: { title: 'DEFEAT', message: 'Tode was caught', victory: false },
+  won: {
+    title: 'THE FLOWER BLOOMED',
+    message: 'You protected it through every level',
+    victory: true,
+    action: 'newRun',
+  },
+  flower: { title: 'DEFEAT', message: 'The flower wilted', victory: false, action: 'restartLevel' },
+  caught: { title: 'DEFEAT', message: 'Tode was caught', victory: false, action: 'restartLevel' },
 };
 const COOP_CAUGHT = { ...OUTCOMES.caught, message: 'The Todes were caught' };
 
@@ -113,9 +131,6 @@ scene.add(directionalLight);
 const renderer = createRenderer();
 const camera = createCamera();
 
-const map = createMap(MAP_SIZE, TILE_SIZE);
-scene.add(map);
-
 const flower = createFlower();
 scene.add(flower);
 
@@ -124,6 +139,9 @@ createPulse(flower);
 
 // Pickups around the flower and the Bloom Shield dome; each player's Nectar Boost is created with the player
 createPowerUps(scene, flower);
+
+// The Ink Octopus's flying ink, warning rings and puddles go straight into the scene
+createInk(scene);
 
 // Everything one player owns: Tode's group (position, model, movement), its attack, its pulse ability
 // and its Nectar Boost
@@ -185,19 +203,53 @@ function updateCamera(delta, snap) {
   placeCamera(camera, focusX, focusY, cameraZoom);
 }
 
-// Houses keep clear of the flower (origin), Tode's start, his current spot, and the enemy spawn corners
-const houses = createHouses(map, MAP_SIZE, [
-  new THREE.Vector2(0, 0),
-  PLAYER_START,
-  playerOne.player.position,
-  ...SPAWN_POINTS,
-]);
+// Every level's world (ground and houses) is built once, when the game loads, and kept for the page session,
+// so each level's house layout stays the same between runs. Only the current level's world is in the scene.
+// Houses keep clear of the flower (origin), Tode's start, his current spot, and the enemy spawn corners.
+const worlds = LEVELS.map((level) =>
+  createWorld(level, {
+    mapSize: MAP_SIZE,
+    tileSize: TILE_SIZE,
+    protectedPoints: [new THREE.Vector2(0, 0), PLAYER_START, playerOne.player.position, ...SPAWN_POINTS],
+  }),
+);
+
+// The current level (an index into LEVELS) and the obstacles bees, players and pickups collide with in it
+let levelIndex = 0;
+let houses = worlds[0].obstacles;
+
+function currentLevel() {
+  return LEVELS[levelIndex];
+}
+
+function levelLabel(index) {
+  return `Level ${index + 1} · ${LEVELS[index].name}`;
+}
+
+// Swaps in a level's world and sky. Nothing is created or disposed: the worlds were all built at load.
+function enterLevel(index) {
+  scene.remove(worlds[levelIndex].group);
+  levelIndex = index;
+  scene.add(worlds[index].group);
+  houses = worlds[index].obstacles;
+  const { background } = currentLevel();
+  scene.background = background ? new THREE.Color(background) : null;
+}
+
+// The score and lives the current level began with, given back by Restart Level.
+// Saved when a new run starts and when the next level is entered, never when a level is restarted.
+let checkpoint = { score: 0, lives: MAX_LIVES };
 
 createScore();
-// Restart keeps the current mode (the buttons pass a click event, so it isn't forwarded)
-createGameOver({ onRestart: () => startGame(), onMainMenu: returnToMenu });
+// Play Again keeps the current mode (the buttons pass a click event, so it isn't forwarded)
+createGameOver({
+  onRestartLevel: restartLevel,
+  onNewRun: () => startGame(),
+  onContinue: continueToNextLevel,
+  onMainMenu: returnToMenu,
+});
 createHud(MAX_LIVES);
-createPauseMenu({ onResume: resume, onRestart: () => startGame(), onMainMenu: returnToMenu });
+createPauseMenu({ onResume: resume, onRestart: restartLevel, onMainMenu: returnToMenu });
 createMenu({ onPlay: (mode) => startGame(mode) });
 
 const enemies = [];
@@ -220,6 +272,37 @@ function disposeEnemy(enemy) {
   }
 }
 
+// Spawns a crab at a random free spot; returns false if none is free
+function spawnCrab() {
+  const distance = (object, point) => Math.hypot(object.position.x - point.x, object.position.y - point.y);
+  const free = CRAB_SPAWN_POINTS.filter(
+    (point) =>
+      !houses.some((house) => house.userData.footprint.distanceToPoint(point) < CRAB_SPAWN_CLEARANCE.obstacle) &&
+      !activeGroups.some((player) => distance(player, point) < CRAB_SPAWN_CLEARANCE.player) &&
+      !enemies.some((enemy) => distance(enemy, point) < CRAB_SPAWN_CLEARANCE.enemy),
+  );
+  if (free.length === 0) return false;
+
+  const crab = createCrab(free[Math.floor(Math.random() * free.length)]);
+  enemies.push(crab);
+  scene.add(crab);
+  return true;
+}
+
+// Spawns an Ink Octopus at a free spot with a clear path in; returns false if there is none
+function trySpawnOctopus() {
+  const octopus = spawnOctopus({ flower, players: activeGroups, enemies, houses });
+  if (!octopus) return false;
+  enemies.push(octopus);
+  scene.add(octopus);
+  return true;
+}
+
+// Bees are the enemies without a type of their own
+function isBee(enemy) {
+  return !isCrab(enemy) && !isOctopus(enemy);
+}
+
 function removeEnemy(enemy) {
   scene.remove(enemy);
   disposeEnemy(enemy);
@@ -227,10 +310,12 @@ function removeEnemy(enemy) {
 }
 
 let spawnTimer = 0;
-let timeLeft = SURVIVAL_TIME;
+let crabTimer = 0; // counts down to the next crab, following the level's crab schedule
+let octopusTimer = 0; // likewise for the Ink Octopus
+let timeLeft = LEVELS[0].duration;
 
-// 'menu' | 'playing' | 'paused' | 'victory' | 'defeat'. The game opens on the main menu, with the
-// garden shown and no bees; a run only starts from startGame().
+// 'menu' | 'playing' | 'paused' | 'levelComplete' | 'victory' | 'defeat'. The game opens on the main menu,
+// with the garden shown and no bees; a run only starts from startGame(). 'victory' is the final level's.
 let gameState = 'menu';
 
 function setGameState(state) {
@@ -264,11 +349,21 @@ createInput({
   },
   ui: {
     Escape: handleEscape,
-    // On the end screens Space restarts, unless a button has focus: the button then handles the press itself
+    // On the end screens Space does what the main button does, unless a button has focus:
+    // the button then handles the press itself
     Space: (event) => {
-      const ended = gameState === 'victory' || gameState === 'defeat';
-      if (ended && !(event.target instanceof HTMLButtonElement)) startGame();
+      if (event.target instanceof HTMLButtonElement) return;
+      if (gameState === 'levelComplete') continueToNextLevel();
+      else if (gameState === 'defeat') restartLevel();
+      else if (gameState === 'victory') startGame();
     },
+    // Developer shortcuts: jump straight to a level (see jumpToLevel)
+    Digit1: (event) => jumpToLevel(0, event),
+    Digit2: (event) => jumpToLevel(1, event),
+    Digit3: (event) => jumpToLevel(2, event),
+    Numpad1: (event) => jumpToLevel(0, event),
+    Numpad2: (event) => jumpToLevel(1, event),
+    Numpad3: (event) => jumpToLevel(2, event),
   },
 });
 
@@ -298,24 +393,29 @@ function resume() {
 
 // Audio starts with the first click or key press (browsers require it); the menu music begins then
 initAudio();
+enterLevel(0);
 setGameMode('single');
 setGameState('menu');
 setMusic('menu');
 showMenu();
 
-// The current wave follows from the survival timer, so it can never drift out of sync with it.
-// Once time has run out (victory), it stays on the last wave.
+// The current wave follows from the level timer, so it can never drift out of sync with it.
+// Once time has run out (level complete), it stays on the last wave.
 function getWaveIndex() {
-  const elapsed = SURVIVAL_TIME - timeLeft;
+  const { duration, waves } = currentLevel();
+  const elapsed = duration - timeLeft;
   let index = 0;
-  while (index + 1 < WAVES.length && elapsed >= WAVES[index + 1].start) {
+  while (index + 1 < waves.length && elapsed >= waves[index + 1].start) {
     index += 1;
   }
   return index;
 }
 
+// Ends the current level. Winning any level but the last completes it; winning the last is the final victory.
 function endGame(outcome) {
-  setGameState(outcome === 'won' ? 'victory' : 'defeat');
+  const levelCleared = outcome === 'won' && levelIndex < LEVELS.length - 1;
+  if (levelCleared) setGameState('levelComplete');
+  else setGameState(outcome === 'won' ? 'victory' : 'defeat');
   for (const { player } of activePlayers) {
     if (outcome === 'won') {
       // Tode stays on screen for the victory, without being left mid-blink
@@ -327,19 +427,31 @@ function endGame(outcome) {
   // The game music fades out and one ending tune plays instead
   setMusic(null);
   playSound(outcome === 'won' ? 'victory' : 'defeat');
-  showGameOver(outcome === 'caught' && gameMode === 'coop' ? COOP_CAUGHT : OUTCOMES[outcome]);
+  if (levelCleared) {
+    showGameOver({
+      title: 'LEVEL COMPLETE',
+      message: `${levelLabel(levelIndex)} is safe! Next: ${levelLabel(levelIndex + 1)}`,
+      victory: true,
+      action: 'continue',
+    });
+  } else {
+    showGameOver(outcome === 'caught' && gameMode === 'coop' ? COOP_CAUGHT : OUTCOMES[outcome]);
+  }
 }
 
-// Clears everything a run changes, back to the calm garden: no bees, full flower, Tode at the start.
-// The scene, map, houses and models themselves are created once and kept.
-function resetRun() {
+// Clears everything a level changes, back to the calm start of the current level: no bees, full flower,
+// players at their starts, no pickups or effects, and the score and lives from the level's checkpoint.
+// The scene, worlds, houses and models themselves are created once and kept.
+function resetLevel() {
   for (const enemy of enemies) {
     scene.remove(enemy);
     disposeEnemy(enemy);
   }
   enemies.length = 0;
   spawnTimer = 0;
-  timeLeft = SURVIVAL_TIME;
+  crabTimer = currentLevel().crabs?.start ?? 0;
+  octopusTimer = currentLevel().octopus?.start ?? 0;
+  timeLeft = currentLevel().duration;
 
   // Every player is reset, active or not, so nothing queued or cooling down carries into the next run.
   // Player 2's spot only matters in co-op; in single player it is out of the scene.
@@ -353,17 +465,17 @@ function resetRun() {
   });
   resetPulseRing();
   resetPowerUps();
-  resetLives();
+  resetInk();
+  resetLives(checkpoint.lives);
   resetFlower();
-  resetScore();
+  resetScore(checkpoint.score);
   hideGameOver();
   updateCamera(0, true);
 }
 
-// Starts a fresh run in the given mode (from the mode menu), or in the current mode (Restart)
-function startGame(mode = gameMode) {
-  setGameMode(mode);
-  resetRun();
+// Plays the current level from its checkpoint
+function playLevel() {
+  resetLevel();
   SPAWN_POINTS.forEach((point) => spawnEnemy(point));
   hideMenu();
   hidePauseMenu();
@@ -375,10 +487,53 @@ function startGame(mode = gameMode) {
   setGameState('playing');
 }
 
-// The menu always shows the single-player garden; the mode is chosen again when Play is pressed
+// Starts a new run at the first level with score 0 and full lives, in the given mode (from the mode menu)
+// or in the current mode (Play Again after the final victory)
+function startGame(mode = gameMode) {
+  setGameMode(mode);
+  checkpoint = { score: 0, lives: MAX_LIVES };
+  enterLevel(0);
+  playLevel();
+}
+
+// Restart Level (defeat screen or pause menu): the same level again, from the score and lives it began with
+function restartLevel() {
+  if (gameState !== 'defeat' && gameState !== 'paused') return;
+  playLevel();
+}
+
+// Continue (level-complete screen): the next level, keeping the score and lives so far.
+// The game is playing again straight away, so a second click or Space press does nothing.
+function continueToNextLevel() {
+  if (gameState !== 'levelComplete') return;
+  checkpoint = { score: getScore(), lives: getLives() };
+  enterLevel(levelIndex + 1);
+  playLevel();
+}
+
+// Developer shortcut (keys 1, 2, 3): plays the given level from a clean start, in the current mode, from any
+// state except the main menu. It uses the current checkpoint, like Restart Level: the score and lives go back to
+// what the current level began with, so a jump never adds or costs anything. Jumping to the current level
+// restarts it. Ignored while typing in a field or with Ctrl, Alt or Meta held, so browser shortcuts still work.
+function jumpToLevel(index, event) {
+  if (gameState === 'menu' || index >= LEVELS.length) return;
+  if (event.ctrlKey || event.altKey || event.metaKey) return;
+  const target = event.target;
+  const editable = ['INPUT', 'TEXTAREA', 'SELECT'];
+  if (target instanceof HTMLElement && (target.isContentEditable || editable.includes(target.tagName))) return;
+
+  event.preventDefault();
+  enterLevel(index);
+  playLevel();
+}
+
+// The menu always shows the single-player garden; the mode is chosen again when Play is pressed,
+// and the run's progress is cleared
 function returnToMenu() {
   setGameMode('single');
-  resetRun();
+  checkpoint = { score: 0, lives: MAX_LIVES };
+  enterLevel(0);
+  resetLevel();
   hidePauseMenu();
   setGameState('menu');
   setMusicDucked(false);
@@ -415,8 +570,12 @@ function applyPickup(type, slot) {
 // Returns the outcome that ends the game this frame ('caught', 'flower' or 'won'), or null to keep playing.
 // A defeat ends the frame as soon as it happens; victory is checked last, so a defeat in the same frame wins.
 function updateGame(delta) {
-  // Difficulty grows linearly with the score; enemy parameters scale faster than the player's
-  const difficulty = Math.min(getScore() * DIFFICULTY_GROWTH_RATE, MAX_DIFFICULTY);
+  const level = currentLevel();
+
+  // Difficulty starts at the level's own value and grows linearly with the score earned in this level
+  // (the score carried in from earlier levels doesn't count again); enemy parameters scale faster than the player's
+  const levelScore = getScore() - checkpoint.score;
+  const difficulty = Math.min(level.startDifficulty + levelScore * DIFFICULTY_GROWTH_RATE, MAX_DIFFICULTY);
   const enemyScale = 1 + difficulty;
   const playerScale = 1 + difficulty * PLAYER_SCALING_RATIO;
 
@@ -430,8 +589,8 @@ function updateGame(delta) {
   }
 
   // Running into a bee costs a shared life (hitTeam ignores hits during the team's invulnerability window).
-  // Players block each other; in co-op the map edge also blocks them.
-  const bounds = gameMode === 'coop' ? MAP_SIZE / 2 : null;
+  // Players block each other; the map edge blocks them in co-op and on levels with a map edge.
+  const bounds = gameMode === 'coop' || level.mapEdge ? MAP_SIZE / 2 : null;
   for (const slot of activePlayers) {
     const { player } = slot;
     const touchedEnemy = updatePlayer(
@@ -440,8 +599,9 @@ function updateGame(delta) {
       enemies,
       flower,
       houses,
-      // Nectar Boost speeds up hops only; it is applied fresh every frame, so it never builds up
-      playerScale * getBoostMultiplier(slot.boost),
+      // Nectar Boost (x1.5) and standing in ink (x0.6) only change hop speed. They are independent and
+      // multiply (boost in ink: x0.9), and are worked out fresh every frame, so neither can build up or stick
+      playerScale * getBoostMultiplier(slot.boost) * getInkSlow(player),
       getInvulnerableTime(),
       activeGroups,
       bounds,
@@ -463,31 +623,57 @@ function updateGame(delta) {
     applyPickup(type, slot);
   }
 
-  // Collect every attack's defeated bees in a set, so a bee is never removed or scored twice,
-  // then remove them after collecting, so the array isn't changed while it's iterated
-  const defeated = new Set();
+  // Collect every attack's hits in a set, so an enemy is never hit twice in one frame (even by both players).
+  // A bee is defeated by one hit; a crab's shell cracks on the first hit and the crab is defeated by the second.
+  // Defeated enemies are removed after collecting, so the array isn't changed while it's iterated.
+  const hits = new Set();
   for (const slot of activePlayers) {
-    for (const enemy of updateAttack(slot.attack, enemies, delta, playerScale)) defeated.add(enemy);
+    for (const enemy of updateAttack(slot.attack, enemies, delta, playerScale)) hits.add(enemy);
     if (slot.attack.fired) playSound('attack', { player: soundPlayer(slot) });
+  }
+  const defeated = [];
+  let cracked = false;
+  for (const enemy of hits) {
+    if (isCrab(enemy) && hitCrab(enemy) === 'cracked') cracked = true;
+    else defeated.push(enemy);
   }
   for (const enemy of defeated) {
     removeEnemy(enemy);
   }
-  // One pop for all the bees defeated this frame
-  if (defeated.size > 0) playSound('pop', { count: defeated.size });
+  // One pop for all the enemies defeated this frame
+  if (defeated.length > 0) playSound('pop', { count: defeated.length });
+  if (cracked) playSound('shellCrack');
 
-  // Only enemies defeated by an attack earn kill points
-  updateScore(delta, defeated.size);
+  // Only enemies defeated by an attack earn kill points (a cracked shell earns nothing)
+  updateScore(delta, defeated.length);
 
   // Spawning follows the current wave, independent of the score. The timer accumulates the shared delta,
   // but pauses while the wave's cap of active bees is reached, so freeing several slots can't release a burst
-  const wave = WAVES[getWaveIndex()];
-  if (enemies.length < wave.maxActive) {
+  // Only bees count toward the wave's cap, so other enemies never take a bee's place
+  const wave = level.waves[getWaveIndex()];
+  if (enemies.filter(isBee).length < wave.maxActive) {
     spawnTimer += delta;
     if (spawnTimer >= wave.spawnInterval) {
       spawnTimer -= wave.spawnInterval;
       spawnEnemy(SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)]);
     }
+  }
+
+  // Crabs follow the level's own schedule (none in the Garden), separate from the bee waves
+  const { crabs } = level;
+  if (crabs) crabTimer -= delta;
+  if (crabs && crabTimer <= 0) {
+    const cap = gameMode === 'coop' ? crabs.coopMax : crabs.max;
+    if (enemies.filter(isCrab).length >= cap) crabTimer = crabs.interval;
+    else crabTimer = spawnCrab() ? crabs.interval : CRAB_RETRY_DELAY;
+  }
+
+  // The Ink Octopus follows its own schedule too (only on the Pond)
+  const { octopus } = level;
+  if (octopus) octopusTimer -= delta;
+  if (octopus && octopusTimer <= 0) {
+    if (enemies.filter(isOctopus).length >= octopus.max) octopusTimer = octopus.interval;
+    else octopusTimer = trySpawnOctopus() ? octopus.interval : OCTOPUS_RETRY_DELAY;
   }
 
   // The bloom pulse marks bees near the flower for pushback before they move this frame
@@ -503,8 +689,14 @@ function updateGame(delta) {
   }
   if (pulsed) playSound('pulse');
 
+  const enemyContext = { flower, players: activeGroups, enemies, houses, speedScale: enemyScale };
   for (const enemy of enemies) {
-    const result = updateEnemy(enemy, flower, activeGroups, delta, enemies, houses, enemyScale);
+    let result;
+    if (isCrab(enemy)) result = updateCrab(enemy, delta, { ...enemyContext, bounds: MAP_SIZE / 2 });
+    else if (isOctopus(enemy)) result = updateOctopus(enemy, delta, enemyContext);
+    else result = updateEnemy(enemy, flower, activeGroups, delta, enemies, houses, enemyScale);
+    if (result === 'warn') playSound('crabClack');
+    if (result === 'lob') playSound('inkLob');
     if (result === 'player' && damageTeam() === 0) return 'caught';
     if (result === 'bite') {
       // The Bloom Shield turns every bite away: no damage and no hit flash
@@ -514,6 +706,18 @@ function updateGame(delta) {
       }
       playSound('bite');
       if (damageFlower(1) === 0) return 'flower';
+    }
+  }
+
+  // Ink that lands this frame: each blob costs the flower 1 HP, unless the Bloom Shield turns it away.
+  // The splat and the puddle happen either way.
+  const inkImpacts = updateInk(delta, enemies);
+  for (let i = 0; i < inkImpacts; i++) {
+    playSound('inkSplat');
+    if (getShieldTime() > 0) {
+      playSound('shieldBlock');
+    } else if (damageFlower(1) === 0) {
+      return 'flower';
     }
   }
 
@@ -539,8 +743,10 @@ renderer.setAnimationLoop(() => {
 
   // Visual-only updates also run on the end screens, so a hit flash or pulse ring can finish and the final
   // wilt or bloom stays on screen. They stay frozen while paused and on the main menu.
-  if (gameState === 'playing' || gameState === 'victory' || gameState === 'defeat') {
-    updateFlower(delta, (SURVIVAL_TIME - timeLeft) / SURVIVAL_TIME);
+  const ended = gameState === 'levelComplete' || gameState === 'victory' || gameState === 'defeat';
+  if (gameState === 'playing' || ended) {
+    const { duration } = currentLevel();
+    updateFlower(delta, (duration - timeLeft) / duration);
     updatePulseVisual(delta);
   }
 
@@ -554,7 +760,8 @@ renderer.setAnimationLoop(() => {
     lives: getLives(),
     timeLeft,
     wave: getWaveIndex() + 1,
-    waveCount: WAVES.length,
+    waveCount: currentLevel().waves.length,
+    level: levelLabel(levelIndex),
     pulseCooldowns: activePlayers.map((slot) => getPulseCooldown(slot.pulse)),
     shieldTime: getShieldTime(),
     boostTimes: activePlayers.map((slot) => slot.boost.timeLeft),

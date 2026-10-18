@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 
-const DARK_GREEN = '#228B22';
-const LIGHT_GREEN = '#90EE90';
-
-export function createMap(size, tileSize) {
+// A checkerboard ground of two alternating colours ([dark, light]), given by the level
+export function createMap(size, tileSize, [darkColor, lightColor]) {
   const map = new THREE.Group();
   const tileCount = Math.round(size / tileSize);
 
@@ -14,7 +12,7 @@ export function createMap(size, tileSize) {
   const context = canvas.getContext('2d');
   for (let row = 0; row < tileCount; row++) {
     for (let column = 0; column < tileCount; column++) {
-      context.fillStyle = (row + column) % 2 === 0 ? DARK_GREEN : LIGHT_GREEN;
+      context.fillStyle = (row + column) % 2 === 0 ? darkColor : lightColor;
       context.fillRect(column, row, 1, 1);
     }
   }

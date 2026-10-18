@@ -23,8 +23,9 @@ export function getScore() {
   return score;
 }
 
-export function resetScore() {
-  score = 0;
+// A new run starts at 0; restarting a level gives back the score it began with
+export function resetScore(value = 0) {
+  score = value;
   render();
 }
 

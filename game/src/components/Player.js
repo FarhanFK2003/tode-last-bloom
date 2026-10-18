@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { blocksMove, computeCollisionRadius, hitsObstacle, isMoveBlocked } from '../collision.js';
+import { isHarmless } from './Enemy.js';
 
 const MODEL_PATH = '/models/tode.glb';
 const MODEL_SCALE = 20;
@@ -142,10 +143,8 @@ export function updatePlayer(player, delta, enemies, flower, houses, speedScale,
 
     if (isMoveBlocked(player, nextX, nextY, enemies)) {
       movement.blocked = true;
-      // Every bee blocks the hop, but one being pushed back by the bloom pulse is harmless
-      touchedEnemy = enemies.some(
-        (enemy) => !(enemy.userData.knockbackTime > 0) && blocksMove(player, nextX, nextY, enemy),
-      );
+      // Every enemy blocks the hop, but one pushed back by the bloom pulse or stunned is harmless
+      touchedEnemy = enemies.some((enemy) => !isHarmless(enemy) && blocksMove(player, nextX, nextY, enemy));
     } else if (
       blocksMove(player, nextX, nextY, flower) ||
       hitsObstacle(player, nextX, nextY, houses) ||

@@ -7,6 +7,7 @@ let healthValue = null;
 let lifePips = [];
 let timer = null;
 let waveLabel = null;
+let levelLabel = null;
 let panel = null;
 let effectsRow = null;
 let effectsValue = null;
@@ -14,14 +15,14 @@ let effectsValue = null;
 const pulseRows = [];
 
 // Last values written to the page, so it is only touched when something changes
-const shown = { flowerHealth: null, lives: null, seconds: null, wave: null, pulses: [], effects: null };
+const shown = { flowerHealth: null, lives: null, seconds: null, wave: null, level: null, pulses: [], effects: null };
 
 const PULSE_LABELS = {
   single: ['Pulse [E]'],
   coop: ['P1 Pulse [E]', 'P2 Pulse [Q]'],
 };
 
-// Top-left panel with the flower health bar and Tode's life pips, plus the timer and wave at the top right
+// Top-left panel with the flower health bar and Tode's life pips, plus the timer, wave and level at the top right
 export function createHud(maxLives) {
   panel = document.createElement('div');
   panel.className = 'hud';
@@ -68,7 +69,9 @@ export function createHud(maxLives) {
   timer.className = 'timer';
   waveLabel = document.createElement('div');
   waveLabel.className = 'wave';
-  timerBox.append(timer, waveLabel);
+  levelLabel = document.createElement('div');
+  levelLabel.className = 'level-label';
+  timerBox.append(timer, waveLabel, levelLabel);
 
   document.body.append(panel, timerBox);
 }
@@ -103,6 +106,7 @@ export function updateHud({
   timeLeft,
   wave,
   waveCount,
+  level,
   pulseCooldowns,
   shieldTime,
   boostTimes,
@@ -131,6 +135,12 @@ export function updateHud({
   if (wave !== shown.wave) {
     shown.wave = wave;
     waveLabel.textContent = `Wave ${wave}/${waveCount}`;
+  }
+
+  // e.g. 'Level 2 · Coast'
+  if (level !== shown.level) {
+    shown.level = level;
+    levelLabel.textContent = level;
   }
 
   // 'Ready', or the whole seconds left on the cooldown, rounded up

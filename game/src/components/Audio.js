@@ -439,6 +439,43 @@ const SOUNDS = {
       return 0.57;
     },
   },
+  // Sand Crab: a dry double clack when it raises its claws, and a crunch when its shell cracks
+  crabClack: {
+    minGap: 0.1,
+    maxVoices: 2,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 1900, to: 1500, duration: 0.03, volume: 0.06, type: 'square' });
+      tone(output, { time: time + 0.08, from: 1900, to: 1500, duration: 0.03, volume: 0.06, type: 'square' });
+      return 0.11;
+    },
+  },
+  shellCrack: {
+    minGap: 0.1,
+    maxVoices: 2,
+    play: ({ time, output }) => {
+      whoosh(output, { time, frequency: 2500, duration: 0.1, volume: 0.12 });
+      tone(output, { time, from: 400, to: 180, duration: 0.12, volume: 0.07, type: 'triangle' });
+      return 0.12;
+    },
+  },
+  // Ink Octopus: a hollow bloop when it lobs ink, and a soft wet splat when the ink lands
+  inkLob: {
+    minGap: 0.2,
+    maxVoices: 1,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 180, to: 520, duration: 0.18, volume: 0.09 });
+      return 0.18;
+    },
+  },
+  inkSplat: {
+    minGap: 0.1,
+    maxVoices: 2,
+    play: ({ time, output }) => {
+      whoosh(output, { time, frequency: 500, duration: 0.18, volume: 0.14 });
+      tone(output, { time, from: 160, to: 80, duration: 0.15, volume: 0.08 });
+      return 0.18;
+    },
+  },
   // A soft tink when the shield turns a bite away
   shieldBlock: {
     minGap: 0.15,

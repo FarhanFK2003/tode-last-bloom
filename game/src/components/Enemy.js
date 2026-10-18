@@ -54,6 +54,33 @@ const KNOCKBACK_SPEED = 140; // units per second while pushed back by the bloom 
 
 const toTarget = new THREE.Vector2();
 
+// Whether touching this enemy is harmless right now: always for an enemy marked harmless (the octopus),
+// while it is pushed back by the bloom pulse, or while stunned (a crab after its first hit)
+export function isHarmless(enemy) {
+  return enemy.userData.harmless === true || enemy.userData.knockbackTime > 0 || enemy.userData.stunTime > 0;
+}
+
+// Bloom Pulse pushback, shared by every enemy type: while knockbackTime lasts, the enemy moves straight away
+// from the flower, harmless and unable to bite. Returns true if the enemy was pushed back this frame.
+export function updateKnockback(enemy, flower, delta, { players, enemies, houses }) {
+  if (!(enemy.userData.knockbackTime > 0)) return false;
+  enemy.userData.knockbackTime = Math.max(enemy.userData.knockbackTime - delta, 0);
+  enemy.userData.biteTimer = 0;
+
+  const awayX = enemy.position.x - flower.position.x;
+  const awayY = enemy.position.y - flower.position.y;
+  const distance = Math.hypot(awayX, awayY);
+  if (distance === 0) return true;
+  const pushStep = KNOCKBACK_SPEED * delta;
+  knockBack(enemy, (awayX / distance) * pushStep, (awayY / distance) * pushStep, pushStep, {
+    flower,
+    players,
+    enemies,
+    houses,
+  });
+  return true;
+}
+
 // Moves the enemy toward the flower. Returns 'player' when its next step runs into any of the players,
 // 'bite' when it lands a bite on the flower, and null otherwise.
 // speedScale multiplies ENEMY_SPEED as difficulty increases.
@@ -66,18 +93,7 @@ export function updateEnemy(enemy, flower, players, delta, enemies, houses, spee
   enemy.rotation.z = Math.atan2(toTarget.x, -toTarget.y);
 
   // Pushed back by the bloom pulse: move away from the flower (still facing it), harmless and unable to bite
-  if (enemy.userData.knockbackTime > 0) {
-    enemy.userData.knockbackTime = Math.max(enemy.userData.knockbackTime - delta, 0);
-    enemy.userData.biteTimer = 0;
-    const pushStep = KNOCKBACK_SPEED * delta;
-    knockBack(enemy, (-toTarget.x / distance) * pushStep, (-toTarget.y / distance) * pushStep, pushStep, {
-      flower,
-      players,
-      enemies,
-      houses,
-    });
-    return null;
-  }
+  if (updateKnockback(enemy, flower, delta, { players, enemies, houses })) return null;
 
   // Never step further than the remaining distance, so enemies don't overshoot
   const step = Math.min(ENEMY_SPEED * speedScale * delta, distance);

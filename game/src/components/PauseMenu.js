@@ -13,7 +13,7 @@ export function createPauseMenu({ onResume, onRestart, onMainMenu }) {
     main: createPanel(
       createHeading('Paused'),
       createButton('Resume', onResume),
-      createButton('Restart', onRestart),
+      createButton('Restart Level', onRestart),
       createButton('Settings', () => show('settings')),
       createButton('Main Menu', onMainMenu),
     ),

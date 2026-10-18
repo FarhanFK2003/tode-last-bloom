@@ -122,6 +122,12 @@ body {
   font: bold 18px sans-serif;
 }
 
+.level-label {
+  margin-top: 2px;
+  font: bold 14px sans-serif;
+  opacity: 0.85;
+}
+
 .game-over {
   position: fixed;
   top: 50%;

@@ -36,7 +36,8 @@ export function getInvulnerableTime() {
   return invulnerableTime;
 }
 
-export function resetLives() {
-  lives = MAX_LIVES;
+// A new run starts with MAX_LIVES; restarting a level gives back the lives it began with
+export function resetLives(count = MAX_LIVES) {
+  lives = count;
   invulnerableTime = 0;
 }
