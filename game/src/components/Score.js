@@ -3,11 +3,18 @@ const SCORE_PER_KILL = 10;
 
 let score = 0;
 let displayedScore = null;
-let element = null;
+let valueElement = null;
 
+// A small 'SCORE' caption and the number, made once; only the number is rewritten when it changes
 export function createScore() {
-  element = document.createElement('div');
+  const element = document.createElement('div');
   element.className = 'score';
+  const caption = document.createElement('span');
+  caption.className = 'score-caption';
+  caption.textContent = 'Score';
+  valueElement = document.createElement('span');
+  valueElement.className = 'score-value';
+  element.append(caption, valueElement);
   document.body.appendChild(element);
   render();
 }
@@ -34,5 +41,5 @@ function render() {
   // The score grows a little every frame; only touch the page when the shown number changes
   if (roundedScore === displayedScore) return;
   displayedScore = roundedScore;
-  element.textContent = `Score: ${roundedScore}`;
+  valueElement.textContent = String(roundedScore);
 }

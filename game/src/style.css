@@ -3,30 +3,57 @@ body {
   overflow: hidden;
 }
 
+/* In-game HUD: small cream cards with a sage border, in the menus' font, so play and menus feel like one game.
+   Stacking order (all of these are fixed children of <body>; the game canvas is not positioned, so it is always
+   behind them): HUD cards 10, boss health 11, boss banner 12, end screen 30, pause 40, main menu 50. */
 .score {
   position: fixed;
+  z-index: 10;
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  color: #fff;
-  font: bold 28px sans-serif;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 16px;
+  color: #35472f;
+  font: bold 26px 'Trebuchet MS', 'Segoe UI', sans-serif;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 248, 231, 0.9);
+  border: 2px solid #7fa77a;
+  border-radius: 14px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
   pointer-events: none;
   user-select: none;
 }
 
+/* A small caption beside the number; the number keeps a minimum width so the pill doesn't jump as it grows */
+.score-caption {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #6b7a63;
+}
+
+.score-value {
+  min-width: 3ch;
+  text-align: right;
+}
+
 .hud {
   position: fixed;
+  z-index: 10;
   top: 16px;
   left: 16px;
   display: grid;
-  gap: 10px;
-  padding: 12px 16px;
-  color: #fff;
-  font: bold 18px sans-serif;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-  background: rgba(0, 0, 0, 0.35);
-  border-radius: 10px;
+  gap: 8px;
+  padding: 10px 14px;
+  color: #35472f;
+  font: bold 17px 'Trebuchet MS', 'Segoe UI', sans-serif;
+  background: rgba(255, 248, 231, 0.9);
+  border: 2px solid #7fa77a;
+  border-radius: 14px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
   pointer-events: none;
   user-select: none;
 }
@@ -41,16 +68,80 @@ body {
   width: 90px;
 }
 
+/* Cooldown seconds are muted; 'Ready' is the warm pink accent, darkened enough to read on cream */
 .pulse-value {
-  color: #ccc;
+  color: #7d8b77;
 }
 
 .pulse-value.ready {
-  color: #ff8fb8;
+  color: #d6447a;
 }
 
+/* Effect chips: a soft blue Shield chip with a small shield shape, and soft gold Boost chips with a sparkle,
+   each with its seconds left; in co-op, Boost chips carry a P1 (gold) or P2 (turquoise) badge */
 .effects-value {
-  color: #ffd1e3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 220px;
+}
+
+.effect-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  font-size: 14px;
+  color: #35472f;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.effect-chip[hidden],
+.effect-owner[hidden] {
+  display: none;
+}
+
+.effect-shield {
+  background: #dcebf8;
+  border: 1px solid #7aa9d4;
+}
+
+.effect-boost {
+  background: #fbedc6;
+  border: 1px solid #d4a63c;
+}
+
+.effect-icon-shield {
+  width: 9px;
+  height: 11px;
+  background: #4f86bd;
+  border-radius: 2px 2px 50% 50% / 2px 2px 70% 70%;
+}
+
+.effect-icon-boost {
+  font-size: 13px;
+  line-height: 1;
+  color: #b07a0e;
+}
+
+.effect-owner {
+  padding: 0 3px;
+  font-size: 11px;
+  color: #fff;
+  border-radius: 4px;
+}
+
+.effect-owner.p1 {
+  background: #a8860a;
+}
+
+.effect-owner.p2 {
+  background: #1f9e93;
+}
+
+.effect-time {
+  font-variant-numeric: tabular-nums;
 }
 
 .hud-row[hidden] {
@@ -63,19 +154,20 @@ body {
 }
 
 .hud.coop .hud-p1 .hud-label {
-  color: #ffff66;
+  color: #a8860a;
 }
 
 .hud.coop .hud-p2 .hud-label {
-  color: #40e0d0;
+  color: #1f9e93;
 }
 
 .health-bar {
   width: 160px;
   height: 14px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(53, 71, 47, 0.15);
   border-radius: 7px;
+  box-shadow: inset 0 0 0 1px rgba(53, 71, 47, 0.25);
 }
 
 .health-fill {
@@ -91,67 +183,139 @@ body {
   background: #e5533d;
 }
 
+/* Lives: a heart glyph per life. Empty hearts are only an outline; filled hearts are warm pink. */
+.lives-row {
+  gap: 6px;
+}
+
 .life-pip {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #fff;
-  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1.5px #c2577f;
 }
 
 .life-pip.filled {
-  background: #ff6b8a;
+  color: #ff8fb8;
+  -webkit-text-stroke-color: #d6447a;
+}
+
+/* Down to the last life: a soft rose tint and outline around the row (no flashing). The padding and negative
+   margin cancel out, so the panel's size doesn't change. */
+.lives-row.last-life {
+  margin: -2px -6px;
+  padding: 2px 6px;
+  background: rgba(214, 68, 122, 0.12);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(214, 68, 122, 0.45);
 }
 
 .timer-box {
   position: fixed;
+  z-index: 10;
   top: 16px;
   right: 16px;
+  padding: 6px 14px 8px;
   text-align: right;
-  color: #fff;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  color: #35472f;
+  background: rgba(255, 248, 231, 0.9);
+  border: 2px solid #7fa77a;
+  border-radius: 14px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
   pointer-events: none;
   user-select: none;
 }
 
 .timer {
-  font: bold 36px sans-serif;
+  font: bold 34px 'Trebuchet MS', 'Segoe UI', sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
 .wave {
-  font: bold 18px sans-serif;
+  font: bold 17px 'Trebuchet MS', 'Segoe UI', sans-serif;
 }
 
 .level-label {
   margin-top: 2px;
-  font: bold 14px sans-serif;
-  opacity: 0.85;
+  font: bold 13px 'Trebuchet MS', 'Segoe UI', sans-serif;
+  color: #6b7a63;
 }
 
+/* End screen (Level Complete, victory and defeat): a cream card with the result, the score and two buttons.
+   Its very wide shadow dims the scene around it, so the game stays visible behind. Defeat uses a gentle muted
+   rose; victory and Level Complete use sage green. */
 .game-over {
   position: fixed;
+  z-index: 30;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  padding: 32px 56px;
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 28px 32px 22px;
   text-align: center;
-  font-family: sans-serif;
-  background: rgba(30, 26, 30, 0.85);
-  border: 4px solid #8b6914;
-  border-radius: 12px;
+  color: #35472f;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  background: #fff8e7;
+  border: 3px solid #c49a8a;
+  border-radius: 22px;
+  box-shadow:
+    0 0 0 100vmax rgba(10, 35, 20, 0.4),
+    0 12px 32px rgba(0, 0, 0, 0.35);
   user-select: none;
 }
 
 .game-over-buttons {
   display: flex;
   justify-content: center;
-  gap: 12px;
-  margin-top: 24px;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .game-over-buttons .menu-button {
   width: auto;
   min-width: 150px;
+  min-height: 44px;
+  padding: 10px 18px;
+  font-size: 17px;
+  border-radius: 12px;
+}
+
+.game-over-buttons .menu-button:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+/* A clear outline for keyboard focus (the shared menu style only changes the colour) */
+.game-over-buttons .menu-button:focus-visible {
+  outline: 3px solid #d6447a;
+  outline-offset: 2px;
+}
+
+.game-over-buttons .result-primary {
+  color: #fff;
+  background: #5f9e5a;
+  border-bottom-color: #41753d;
+}
+
+.game-over-buttons .result-primary:hover,
+.game-over-buttons .result-primary:focus-visible {
+  background: #4f8c4a;
+  border-bottom-color: #36632f;
+}
+
+.game-over-buttons .result-secondary {
+  color: #5b6655;
+  background: #f1eadb;
+  border-bottom-color: #d6cbb4;
+}
+
+.game-over-buttons .result-secondary:hover,
+.game-over-buttons .result-secondary:focus-visible {
+  background: #e7dcc5;
+  border-bottom-color: #c7b998;
 }
 
 .game-over[hidden] {
@@ -159,40 +323,111 @@ body {
 }
 
 .game-over h1 {
-  margin: 0 0 24px;
-  font-size: 72px;
-  color: #8b6914;
+  margin: 0 0 6px;
+  font-size: 40px;
+  letter-spacing: 2px;
+  color: #a0605a;
 }
 
 .game-over p {
   margin: 0;
-  font-size: 28px;
-  color: #fff;
 }
 
 .game-over .message {
   margin-bottom: 16px;
+  font-size: 18px;
+  color: #5b6655;
+}
+
+/* The score: a small caption over a large number in a pale sage box */
+.result-score {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 24px;
+  background: #eef3e4;
+  border: 2px solid #b5c9a8;
+  border-radius: 14px;
+}
+
+.result-score-caption {
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #6b7a63;
+}
+
+.result-score-value {
+  max-width: 100%;
+  font-size: 34px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  color: #35472f;
+}
+
+.game-over .result-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #6b7a63;
 }
 
 .game-over.victory {
-  border-color: #2e8b57;
+  border-color: #7fa77a;
 }
 
 .game-over.victory h1 {
-  color: #3cb371;
+  color: #2e8b57;
+}
+
+/* Short windows: a tighter end screen */
+@media (max-height: 520px) {
+  .game-over {
+    padding: 16px 20px 14px;
+  }
+
+  .game-over h1 {
+    font-size: 28px;
+  }
+
+  .game-over .message {
+    margin-bottom: 10px;
+  }
+
+  .result-score-value {
+    font-size: 26px;
+  }
+
+  .game-over-buttons {
+    margin-top: 12px;
+  }
+
+  .game-over-buttons .menu-button {
+    min-height: 38px;
+    padding: 6px 14px;
+  }
 }
 
 /* The boss's health bar, under the score */
 .boss-panel {
   position: fixed;
-  top: 56px;
+  z-index: 11;
+  top: 68px;
   left: 50%;
   transform: translateX(-50%);
+  box-sizing: border-box;
   width: min(360px, 60vw);
+  padding: 4px 12px 8px;
   text-align: center;
-  color: #fff;
-  font: bold 16px sans-serif;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  color: #35472f;
+  font: bold 16px 'Trebuchet MS', 'Segoe UI', sans-serif;
+  background: rgba(255, 248, 231, 0.9);
+  border: 2px solid #7fa77a;
+  border-radius: 14px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
   pointer-events: none;
   user-select: none;
 }
@@ -201,12 +436,30 @@ body {
   display: none;
 }
 
+/* The boss's name on the left and its actual health ('8 / 12') on the right */
+.boss-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.boss-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #6b7a63;
+}
+
+.boss-value[hidden] {
+  display: none;
+}
+
 .boss-bar {
   height: 14px;
   margin-top: 4px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.35);
-  border: 2px solid #fff;
+  background: rgba(53, 71, 47, 0.15);
+  border: 2px solid #7fa77a;
   border-radius: 8px;
 }
 
@@ -218,6 +471,7 @@ body {
 /* The boss's name, large across the screen during its intro */
 .boss-banner {
   position: fixed;
+  z-index: 12;
   top: 32%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -247,6 +501,7 @@ body[data-state='menu'] .boss-banner {
 /* Main menu and pause menu: a cozy garden panel over the dimmed scene */
 .menu-overlay {
   position: fixed;
+  z-index: 50;
   inset: 0;
   display: flex;
   align-items: center;
@@ -262,7 +517,118 @@ body[data-state='menu'] .boss-banner {
 }
 
 .pause-overlay {
-  background: rgba(10, 35, 20, 0.55);
+  z-index: 40;
+  background: rgba(10, 35, 20, 0.45);
+}
+
+/* Pause screen: a compact cream card with a sage border, a spaced-out PAUSED title and three kinds of button.
+   Everything here is scoped to .pause-overlay, so the main menu and end screens are untouched. */
+.pause-overlay .pause-panel {
+  width: min(320px, calc(100vw - 32px));
+  gap: 10px;
+  padding: 24px 28px 26px;
+  border: 3px solid #7fa77a;
+  border-radius: 20px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+}
+
+.pause-overlay .pause-panel h2 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: #2e6b47;
+}
+
+.pause-overlay .pause-subtitle {
+  margin: -6px 0 6px;
+  font-size: 14px;
+  font-style: italic;
+  color: #6b7a63;
+}
+
+.pause-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.pause-overlay .menu-button {
+  min-height: 44px;
+  padding: 10px 18px;
+  font-size: 17px;
+  border-radius: 12px;
+}
+
+.pause-overlay .menu-button:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+/* A clear outline for keyboard focus (the shared menu style only changes the colour) */
+.pause-overlay .menu-button:focus-visible {
+  outline: 3px solid #d6447a;
+  outline-offset: 2px;
+}
+
+.pause-overlay .pause-primary {
+  color: #fff;
+  background: #5f9e5a;
+  border-bottom-color: #41753d;
+}
+
+.pause-overlay .pause-primary:hover,
+.pause-overlay .pause-primary:focus-visible {
+  background: #4f8c4a;
+  border-bottom-color: #36632f;
+}
+
+.pause-overlay .pause-secondary {
+  color: #35472f;
+  background: #e8f0de;
+  border-bottom-color: #b5c9a8;
+}
+
+.pause-overlay .pause-secondary:hover,
+.pause-overlay .pause-secondary:focus-visible {
+  background: #d9e7cb;
+  border-bottom-color: #9fb791;
+}
+
+.pause-overlay .pause-quiet {
+  margin-top: 6px;
+  color: #5b6655;
+  background: #f1eadb;
+  border-bottom-color: #d6cbb4;
+}
+
+.pause-overlay .pause-quiet:hover,
+.pause-overlay .pause-quiet:focus-visible {
+  background: #e7dcc5;
+  border-bottom-color: #c7b998;
+}
+
+/* Short windows: a tighter pause card so all four buttons stay on screen */
+@media (max-height: 520px) {
+  .pause-overlay .pause-panel {
+    gap: 6px;
+    padding: 14px 20px 16px;
+  }
+
+  .pause-overlay .pause-panel h2 {
+    font-size: 24px;
+  }
+
+  .pause-overlay .pause-subtitle {
+    display: none;
+  }
+
+  .pause-overlay .menu-button {
+    min-height: 38px;
+    padding: 6px 14px;
+    font-size: 15px;
+  }
 }
 
 .menu-panel {
@@ -420,4 +786,154 @@ body[data-state='menu'] .boss-banner {
   height: 18px;
   accent-color: #ff8fb8;
   cursor: pointer;
+}
+
+/* Narrower windows: tighter HUD cards and a smaller end screen, so they fit without running off screen */
+@media (max-width: 760px) {
+  .hud {
+    gap: 6px;
+    padding: 8px 10px;
+    font-size: 15px;
+  }
+
+  .hud-label {
+    width: 70px;
+  }
+
+  .hud.coop .hud-label {
+    width: 100px;
+  }
+
+  .health-bar {
+    width: 110px;
+  }
+
+  .score {
+    top: 104px;
+    right: 16px;
+    left: auto;
+    transform: none;
+    font-size: 22px;
+  }
+
+  .timer-box {
+    padding: 4px 10px 6px;
+  }
+
+  .timer {
+    font-size: 26px;
+  }
+
+  .wave {
+    font-size: 15px;
+  }
+
+  .boss-panel {
+    top: 16px;
+    width: min(300px, 70vw);
+    font-size: 14px;
+  }
+
+  .boss-banner {
+    font-size: 44px;
+    letter-spacing: 3px;
+  }
+
+  .game-over {
+    padding: 22px 22px 18px;
+  }
+
+  .game-over h1 {
+    font-size: 34px;
+  }
+
+  .game-over .message {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .hud {
+    font-size: 13px;
+  }
+
+  .hud-label {
+    width: 58px;
+  }
+
+  .hud.coop .hud-label {
+    width: 84px;
+  }
+
+  .health-bar {
+    width: 80px;
+  }
+
+  .life-pip {
+    font-size: 16px;
+  }
+
+  .effects-value {
+    max-width: 160px;
+  }
+
+  .effect-chip {
+    padding: 0 5px;
+    font-size: 12px;
+  }
+
+  .score {
+    font-size: 18px;
+  }
+
+  .score-caption {
+    font-size: 10px;
+  }
+
+  .timer {
+    font-size: 22px;
+  }
+
+  .wave {
+    font-size: 13px;
+  }
+
+  .level-label {
+    font-size: 11px;
+  }
+
+  .boss-panel {
+    top: auto;
+    bottom: 16px;
+  }
+
+  .boss-value {
+    font-size: 12px;
+  }
+
+  .boss-banner {
+    font-size: 32px;
+  }
+
+  .game-over h1 {
+    font-size: 28px;
+    letter-spacing: 1px;
+  }
+
+  .game-over .message {
+    font-size: 15px;
+  }
+
+  .result-score-value {
+    font-size: 28px;
+  }
+
+  .game-over-buttons {
+    flex-wrap: wrap;
+  }
+
+  .game-over-buttons .menu-button {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
 }

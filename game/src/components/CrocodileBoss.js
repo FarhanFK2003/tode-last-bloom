@@ -787,7 +787,8 @@ function pose() {
   boss.flashMaterial.emissive.copy(fight.flashColor).multiplyScalar(flashStrength * 0.6);
 }
 
-// What the HUD shows: name, health (0 to 1) and how visible the intro banner is; null when there is no boss
+// What the HUD shows: name, health (0 to 1), its actual current and maximum health (read straight from the
+// fight, for the 'current / max' figure), and how visible the intro banner is; null when there is no boss
 export function getBossHud() {
   if (!active) return null;
   const [fadeInStart, fadeInEnd, fadeOutStart, fadeOutEnd] = BANNER_FADE;
@@ -796,5 +797,11 @@ export function getBossHud() {
   if (t >= fadeInStart && t < fadeInEnd) banner = (t - fadeInStart) / (fadeInEnd - fadeInStart);
   else if (t >= fadeInEnd && t < fadeOutStart) banner = 1;
   else if (t >= fadeOutStart && t < fadeOutEnd) banner = 1 - (t - fadeOutStart) / (fadeOutEnd - fadeOutStart);
-  return { name: BOSS_NAME, health: fight.health / fight.maxHealth, banner };
+  return {
+    name: BOSS_NAME,
+    health: fight.health / fight.maxHealth,
+    current: fight.health,
+    max: fight.maxHealth,
+    banner,
+  };
 }

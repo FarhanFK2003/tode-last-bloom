@@ -1,4 +1,5 @@
 import { createButton } from '../ui.js';
+import { getScore } from './Score.js';
 
 // The end screen's main button depends on how the level ended:
 //   restartLevel: after a defeat, play the same level again
@@ -14,6 +15,8 @@ let element = null;
 let title = null;
 let message = null;
 let hint = null;
+let scoreCaption = null;
+let scoreValue = null;
 let primaryButton = null;
 let handlers = null;
 let action = null;
@@ -30,13 +33,27 @@ export function createGameOver({ onRestartLevel, onNewRun, onContinue, onMainMen
   message = document.createElement('p');
   message.className = 'message';
   hint = document.createElement('p');
+  hint.className = 'result-hint';
 
+  // The score as the HUD shows it (whole points), read when the screen opens
+  const score = document.createElement('div');
+  score.className = 'result-score';
+  scoreCaption = document.createElement('span');
+  scoreCaption.className = 'result-score-caption';
+  scoreValue = document.createElement('span');
+  scoreValue.className = 'result-score-value';
+  score.append(scoreCaption, scoreValue);
+
+  // Same buttons and handlers as before; the classes only style them: the main action, then Main Menu
   const buttons = document.createElement('div');
   buttons.className = 'game-over-buttons';
   primaryButton = createButton('', () => handlers[action]());
-  buttons.append(primaryButton, createButton('Main Menu', onMainMenu));
+  primaryButton.classList.add('result-primary');
+  const menuButton = createButton('Main Menu', onMainMenu);
+  menuButton.classList.add('result-secondary');
+  buttons.append(primaryButton, menuButton);
 
-  element.append(title, message, hint, buttons);
+  element.append(title, message, score, buttons, hint);
   document.body.appendChild(element);
 }
 
@@ -47,6 +64,9 @@ export function showGameOver(outcome) {
   title.textContent = outcome.title;
   message.textContent = outcome.message;
   hint.textContent = ACTIONS[action].hint;
+  // Gameplay has stopped, so this is the run's score at this ending; 'so far' while the run goes on
+  scoreCaption.textContent = action === 'continue' ? 'Score so far' : 'Final score';
+  scoreValue.textContent = String(Math.floor(getScore()));
   primaryButton.textContent = ACTIONS[action].label;
   element.classList.toggle('victory', outcome.victory);
   element.hidden = false;

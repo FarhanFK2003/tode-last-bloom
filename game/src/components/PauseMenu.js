@@ -1,4 +1,4 @@
-import { createButton, createHeading, createPanel, createSettingsPanel, showPanel } from '../ui.js';
+import { createButton, createHeading, createPanel, createSettingsPanel, createText, showPanel } from '../ui.js';
 
 let overlay = null;
 let panels = null;
@@ -9,14 +9,26 @@ export function createPauseMenu({ onResume, onRestart, onMainMenu }) {
   overlay.className = 'menu-overlay pause-overlay';
   overlay.hidden = true;
 
+  // The same buttons, handlers and order as always; the classes only style them (see .pause-overlay in style.css):
+  // Resume is the main action, Restart Level and Settings are secondary, Main Menu is set a little apart
+  const actions = document.createElement('div');
+  actions.className = 'pause-actions';
+  const buttons = [
+    [createButton('Resume', onResume), 'pause-primary'],
+    [createButton('Restart Level', onRestart), 'pause-secondary'],
+    [createButton('Settings', () => show('settings')), 'pause-secondary'],
+    [createButton('Main Menu', onMainMenu), 'pause-quiet'],
+  ];
+  for (const [button, style] of buttons) {
+    button.classList.add(style);
+    actions.append(button);
+  }
+
+  const main = createPanel(createHeading('Paused'), createText('Take a breather', 'pause-subtitle'), actions);
+  main.classList.add('pause-panel');
+
   panels = {
-    main: createPanel(
-      createHeading('Paused'),
-      createButton('Resume', onResume),
-      createButton('Restart Level', onRestart),
-      createButton('Settings', () => show('settings')),
-      createButton('Main Menu', onMainMenu),
-    ),
+    main,
     settings: createSettingsPanel(() => show('main')),
   };
 
