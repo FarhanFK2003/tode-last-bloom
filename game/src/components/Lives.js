@@ -20,6 +20,14 @@ export function hitTeam() {
   return lives;
 }
 
+// Petal Burst: restores one life, never above MAX_LIVES. Returns whether a life was restored.
+// The invulnerability window is left as it is.
+export function healTeam() {
+  if (lives >= MAX_LIVES) return false;
+  lives += 1;
+  return true;
+}
+
 export function getLives() {
   return lives;
 }

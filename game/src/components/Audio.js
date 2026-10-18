@@ -412,6 +412,50 @@ const SOUNDS = {
       return 0.34;
     },
   },
+  // Power-ups: a shimmer for the Bloom Shield, a quick trill for Nectar Boost, a warm chime for Petal Burst
+  pickupShield: {
+    minGap: 0.1,
+    maxVoices: 1,
+    play: ({ time, output }) => {
+      notes(output, time, [79, 84, 88], { spacing: 0.06, duration: 0.4, volume: 0.06, type: 'sine' });
+      return 0.52;
+    },
+  },
+  pickupBoost: {
+    perPlayer: true,
+    minGap: 0.1,
+    maxVoices: 2,
+    play: ({ time, pitch, output }) => {
+      tone(output, { time, from: 500 * pitch, to: 1200 * pitch, duration: 0.18, volume: 0.07, type: 'triangle' });
+      tone(output, { time: time + 0.1, from: 900 * pitch, to: 1600 * pitch, duration: 0.15, volume: 0.05 });
+      return 0.25;
+    },
+  },
+  pickupHeal: {
+    minGap: 0.1,
+    maxVoices: 1,
+    play: ({ time, output }) => {
+      notes(output, time, [72, 79], { spacing: 0.12, duration: 0.45, volume: 0.09 });
+      return 0.57;
+    },
+  },
+  // A soft tink when the shield turns a bite away
+  shieldBlock: {
+    minGap: 0.15,
+    maxVoices: 2,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 1568, to: 1400, duration: 0.08, volume: 0.04 });
+      return 0.08;
+    },
+  },
+  shieldDown: {
+    minGap: 0.3,
+    maxVoices: 1,
+    play: ({ time, output }) => {
+      tone(output, { time, from: 880, to: 330, duration: 0.4, volume: 0.07, type: 'triangle' });
+      return 0.4;
+    },
+  },
   victory: {
     jingle: true,
     minGap: 1,

@@ -8,11 +8,13 @@ let lifePips = [];
 let timer = null;
 let waveLabel = null;
 let panel = null;
+let effectsRow = null;
+let effectsValue = null;
 // One row per player's Bloom Pulse; the second is only shown in co-op
 const pulseRows = [];
 
 // Last values written to the page, so it is only touched when something changes
-const shown = { flowerHealth: null, lives: null, seconds: null, wave: null, pulses: [] };
+const shown = { flowerHealth: null, lives: null, seconds: null, wave: null, pulses: [], effects: null };
 
 const PULSE_LABELS = {
   single: ['Pulse [E]'],
@@ -50,7 +52,14 @@ export function createHud(maxLives) {
     pulseRows.push({ row, label: row.firstChild, value });
   }
 
-  panel.append(healthRow, livesRow, ...pulseRows.map(({ row }) => row));
+  // Active power-ups (Bloom Shield, Nectar Boost) with their seconds left; hidden when there are none
+  effectsRow = createRow('Effects');
+  effectsValue = document.createElement('span');
+  effectsValue.className = 'effects-value';
+  effectsRow.append(effectsValue);
+  effectsRow.hidden = true;
+
+  panel.append(healthRow, livesRow, ...pulseRows.map(({ row }) => row), effectsRow);
   setHudMode('single');
 
   const timerBox = document.createElement('div');
@@ -83,10 +92,21 @@ export function setHudMode(mode) {
     label.textContent = labels[index] ?? '';
   });
   shown.pulses = [];
+  shown.effects = null;
 }
 
-// pulseCooldowns: one value per active player, in player order
-export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave, waveCount, pulseCooldowns }) {
+// pulseCooldowns and boostTimes: one value per active player, in player order
+export function updateHud({
+  flowerHealth,
+  flowerMaxHealth,
+  lives,
+  timeLeft,
+  wave,
+  waveCount,
+  pulseCooldowns,
+  shieldTime,
+  boostTimes,
+}) {
   if (flowerHealth !== shown.flowerHealth) {
     shown.flowerHealth = flowerHealth;
     const ratio = flowerHealth / flowerMaxHealth;
@@ -121,4 +141,17 @@ export function updateHud({ flowerHealth, flowerMaxHealth, lives, timeLeft, wave
     pulseRows[index].value.textContent = pulse;
     pulseRows[index].value.classList.toggle('ready', cooldown === 0);
   });
+
+  // e.g. 'Shield 6s · Boost 3s', or 'P1 Boost 3s · P2 Boost 5s' in co-op; seconds rounded up
+  const effects = [];
+  if (shieldTime > 0) effects.push(`Shield ${Math.ceil(shieldTime)}s`);
+  boostTimes.forEach((time, index) => {
+    if (time > 0) effects.push(`${boostTimes.length > 1 ? `P${index + 1} ` : ''}Boost ${Math.ceil(time)}s`);
+  });
+  const text = effects.join(' · ');
+  if (text !== shown.effects) {
+    shown.effects = text;
+    effectsValue.textContent = text;
+    effectsRow.hidden = text === '';
+  }
 }

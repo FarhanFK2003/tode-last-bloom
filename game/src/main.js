@@ -8,7 +8,15 @@ import {
   showPlayerModel,
   updatePlayer,
 } from './components/Player.js';
-import { MAX_LIVES, getInvulnerableTime, getLives, hitTeam, resetLives, updateLives } from './components/Lives.js';
+import {
+  MAX_LIVES,
+  getInvulnerableTime,
+  getLives,
+  healTeam,
+  hitTeam,
+  resetLives,
+  updateLives,
+} from './components/Lives.js';
 import { createEnemy, updateEnemy } from './components/Enemy.js';
 import { createAttack, requestAttack, resetAttack, updateAttack } from './components/Attack.js';
 import { createScore, getScore, resetScore, updateScore } from './components/Score.js';
@@ -40,6 +48,19 @@ import { createPauseMenu, hidePauseMenu, pauseMenuBack, showPauseMenu } from './
 import { createCamera, getFramingZoom, placeCamera } from './components/Camera.js';
 import { createRenderer } from './components/Renderer.js';
 import { initAudio, playSound, setMusic, setMusicDucked } from './components/Audio.js';
+import {
+  activateBoost,
+  activateShield,
+  createBoost,
+  createPowerUps,
+  getBoostMultiplier,
+  getShieldTime,
+  resetBoost,
+  resetPowerUps,
+  updateBoost,
+  updatePickups,
+  updateShield,
+} from './components/PowerUps.js';
 
 const MAP_SIZE = 500;
 const TILE_SIZE = 20;
@@ -101,11 +122,21 @@ scene.add(flower);
 // The shared pulse ring around the flower; each player's pulse ability is created with the player
 createPulse(flower);
 
-// Everything one player owns: Tode's group (position, model, movement), its attack and its pulse ability
+// Pickups around the flower and the Bloom Shield dome; each player's Nectar Boost is created with the player
+createPowerUps(scene, flower);
+
+// Everything one player owns: Tode's group (position, model, movement), its attack, its pulse ability
+// and its Nectar Boost
 function createPlayerSlot(start, { tint, tintStrength, attackColor } = {}) {
   const player = createPlayer(start, { tint, tintStrength });
-  // pulseCooling remembers whether the pulse was cooling down last frame, for the "ready" chime
-  return { player, attack: createAttack(player, attackColor), pulse: createPulseAbility(), pulseCooling: false };
+  return {
+    player,
+    attack: createAttack(player, attackColor),
+    pulse: createPulseAbility(),
+    boost: createBoost(),
+    // Whether the pulse was cooling down last frame, for the "ready" chime
+    pulseCooling: false,
+  };
 }
 
 // Both players are created once, when the game loads. Player 2 only joins the scene in co-op.
@@ -317,9 +348,11 @@ function resetRun() {
     resetPlayer(slot.player, starts[index] ?? COOP_STARTS[index]);
     resetAttack(slot.attack);
     resetPulse(slot.pulse);
+    resetBoost(slot.boost);
     slot.pulseCooling = false;
   });
   resetPulseRing();
+  resetPowerUps();
   resetLives();
   resetFlower();
   resetScore();
@@ -366,6 +399,19 @@ function damageTeam() {
   return lives;
 }
 
+// Applies one collected pickup. A petal is only collected while a life is missing, so healTeam succeeds.
+function applyPickup(type, slot) {
+  if (type === 'shield') {
+    activateShield(flower);
+    playSound('pickupShield');
+  } else if (type === 'boost') {
+    activateBoost(slot.boost);
+    playSound('pickupBoost', { player: soundPlayer(slot) });
+  } else if (type === 'petal' && healTeam()) {
+    playSound('pickupHeal');
+  }
+}
+
 // Returns the outcome that ends the game this frame ('caught', 'flower' or 'won'), or null to keep playing.
 // A defeat ends the frame as soon as it happens; victory is checked last, so a defeat in the same frame wins.
 function updateGame(delta) {
@@ -376,6 +422,12 @@ function updateGame(delta) {
 
   // The invulnerability window counts down first, before any hit this frame (as it always has)
   updateLives(delta);
+
+  // Power-up effects count down here, inside the gameplay update, so pausing or ending the game freezes them
+  if (updateShield(delta)) playSound('shieldDown');
+  for (const slot of activePlayers) {
+    updateBoost(slot.boost, delta);
+  }
 
   // Running into a bee costs a shared life (hitTeam ignores hits during the team's invulnerability window).
   // Players block each other; in co-op the map edge also blocks them.
@@ -388,13 +440,27 @@ function updateGame(delta) {
       enemies,
       flower,
       houses,
-      playerScale,
+      // Nectar Boost speeds up hops only; it is applied fresh every frame, so it never builds up
+      playerScale * getBoostMultiplier(slot.boost),
       getInvulnerableTime(),
       activeGroups,
       bounds,
     );
     if (player.userData.state.hopStarted) playSound('hop', { player: soundPlayer(slot) });
     if (touchedEnemy && damageTeam() === 0) return 'caught';
+  }
+
+  // Each pickup goes to the first player touching it, once, even when both players reach it together
+  const collected = updatePickups(delta, {
+    slots: activePlayers,
+    houses,
+    flower,
+    enemies,
+    camera,
+    canHeal: () => getLives() < MAX_LIVES,
+  });
+  for (const { type, slot } of collected) {
+    applyPickup(type, slot);
   }
 
   // Collect every attack's defeated bees in a set, so a bee is never removed or scored twice,
@@ -441,6 +507,11 @@ function updateGame(delta) {
     const result = updateEnemy(enemy, flower, activeGroups, delta, enemies, houses, enemyScale);
     if (result === 'player' && damageTeam() === 0) return 'caught';
     if (result === 'bite') {
+      // The Bloom Shield turns every bite away: no damage and no hit flash
+      if (getShieldTime() > 0) {
+        playSound('shieldBlock');
+        continue;
+      }
       playSound('bite');
       if (damageFlower(1) === 0) return 'flower';
     }
@@ -485,6 +556,8 @@ renderer.setAnimationLoop(() => {
     wave: getWaveIndex() + 1,
     waveCount: WAVES.length,
     pulseCooldowns: activePlayers.map((slot) => getPulseCooldown(slot.pulse)),
+    shieldTime: getShieldTime(),
+    boostTimes: activePlayers.map((slot) => slot.boost.timeLeft),
   });
 
   renderer.render(scene, camera);
