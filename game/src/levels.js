@@ -2,9 +2,11 @@
 //   name:            shown in the HUD and on the level-complete screen
 //   world:           which world the level is played in. Levels with the same world share one built world
 //                    (the Pond and the boss level); the world's look comes from the first level that names it.
-//   groundColors:    the ground's colours: [dark, light] tiles for a checkerboard, [base, patch, speckle] for a meadow
-//   groundPattern:   'checker' (the default) or 'meadow' (irregular moss patches)
-//   background:      sky colour behind the world, or null to keep the page showing through (the Garden, as before)
+//   groundColors:    the ground's colours: [dark, light] tiles for a checkerboard, [base, patch, speckle] for a meadow,
+//                    [grass, light grass, dark grass, speckle, path, clearing, flower speck] for the Garden's ground
+//   groundPattern:   'checker' (the default), 'meadow' (irregular moss patches) or 'garden' (the Garden's meadow
+//                    with its clearing and paths; see Map.js)
+//   background:      sky colour behind the world, or null to keep the page showing through
 //   light:           optional { sun, ambient } light colours for this level; white when not given
 //   features:        what the world places on and around its ground: obstacles and scenery (see World.js)
 //   mapEdge:         whether the map edge also blocks the player in single player (co-op always has it)
@@ -62,8 +64,13 @@ export const LEVELS = [
   {
     name: 'Garden',
     world: 'garden',
-    groundColors: ['#228B22', '#90EE90'],
-    background: null,
+    // Warm meadow greens, sandy paths and clearing, and buttercup specks
+    groundColors: ['#86B464', '#A2C97B', '#6E9C52', '#5E8A46', '#E3D3A0', '#EEE2BD', '#F2D25C'],
+    groundPattern: 'garden',
+    // A pale meadow green beyond the map edge, instead of the white page
+    background: '#CFE3B5',
+    // A gently warm sun and a soft, slightly warm ambient: close to white so Tode, bees and houses keep their colours
+    light: { sun: '#FFF0D8', ambient: '#F7F5EC' },
     features: 'houses',
     mapEdge: false,
     duration: 120,

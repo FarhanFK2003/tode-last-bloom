@@ -5,12 +5,31 @@ const MEADOW_RESOLUTION = 128;
 const MEADOW_PATCHES = 45;
 const MEADOW_SPECKLES = 500;
 
+// Garden ground: painted at one canvas pixel per GARDEN_UNITS_PER_PIXEL world units, so a 20-unit hop tile is a
+// whole number of pixels. All sizes below are in world units.
+const GARDEN_UNITS_PER_PIXEL = 2;
+const GARDEN_PATCHES = 70; // soft lighter and darker drifts of grass
+const GARDEN_SPECKLES = 1400;
+const GARDEN_FLOWER_SPECKS = 90; // tiny warm dots, like far-off buttercups, kept off the paths and clearing
+const GARDEN_CLEARING_RADIUS = 72; // solid sandy clearing around the flower (the pickup ring is at 90)
+const GARDEN_CLEARING_FADE = 12; // its edge softens into the grass over this distance
+const GARDEN_CLEARING_RING = 58; // a faint stone-ring line inside the clearing
+const GARDEN_PATH_WIDTH = 16;
+const GARDEN_PATH_WAVE = 6; // the paths meander a little either side of the diagonals
+const GARDEN_GRID_ALPHA = 0.035; // alternate hop tiles are this much darker: a hint of the grid, not a checkerboard
+
 // The ground, given by the level:
 //   'checker': a checkerboard of two alternating colours ([dark, light]), one tile per tileSize
 //   'meadow':  a base colour with irregular lighter patches and darker speckles ([base, patch, speckle])
+//   'garden':  the Garden's meadow: grass with soft lighter and darker drifts, a sandy clearing around the
+//              flower, four meandering paths to the corners and a faint hint of the hop grid
+//              ([grass, light grass, dark grass, speckle, path, clearing, flower speck])
 export function createMap(size, tileSize, colors, pattern = 'checker') {
   const map = new THREE.Group();
-  const canvas = pattern === 'meadow' ? paintMeadow(colors) : paintChecker(Math.round(size / tileSize), colors);
+  let canvas;
+  if (pattern === 'meadow') canvas = paintMeadow(colors);
+  else if (pattern === 'garden') canvas = paintGarden(size, tileSize, colors);
+  else canvas = paintChecker(Math.round(size / tileSize), colors);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -38,6 +57,138 @@ function paintChecker(tileCount, [darkColor, lightColor]) {
       context.fillRect(column, row, 1, 1);
     }
   }
+  return canvas;
+}
+
+// Seeded random numbers, so a painted ground is the same on every load
+function createRandom(seed) {
+  let state = seed;
+  return () => {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    return state / 4294967296;
+  };
+}
+
+// The Garden's meadow. The canvas covers the map exactly: world (x, y) is canvas pixel
+// ((x + half) / scale, (half - y) / scale).
+// Paths and the clearing are painted here, so they are only colour on the ground: nothing to bump into.
+function paintGarden(size, tileSize, [grass, lightGrass, darkGrass, speckle, path, clearing, flowerSpeck]) {
+  const scale = GARDEN_UNITS_PER_PIXEL;
+  const pixels = Math.round(size / scale);
+  const half = size / 2;
+  const toPixel = (units) => units / scale;
+  const centre = pixels / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = pixels;
+  canvas.height = pixels;
+  const context = canvas.getContext('2d');
+  const random = createRandom(23);
+
+  context.fillStyle = grass;
+  context.fillRect(0, 0, pixels, pixels);
+
+  // Soft drifts of lighter and darker grass: low-opacity clusters of round blobs
+  for (let i = 0; i < GARDEN_PATCHES; i++) {
+    context.fillStyle = i % 3 === 0 ? darkGrass : lightGrass;
+    context.globalAlpha = 0.35 + random() * 0.25;
+    const x = random() * pixels;
+    const y = random() * pixels;
+    for (let blob = 0; blob < 5; blob++) {
+      context.beginPath();
+      context.arc(x + (random() - 0.5) * 18, y + (random() - 0.5) * 18, 3 + random() * 7, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+
+  context.globalAlpha = 0.6;
+  context.fillStyle = speckle;
+  for (let i = 0; i < GARDEN_SPECKLES; i++) {
+    context.fillRect(Math.floor(random() * pixels), Math.floor(random() * pixels), 1, 1);
+  }
+
+  // Four paths from the clearing to the corners where bees arrive: a soft wide band under a narrower one,
+  // with a gentle sideways wave so they don't look ruled
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  context.strokeStyle = path;
+  for (const [cornerX, cornerY] of [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ]) {
+    const points = [];
+    const startLength = GARDEN_CLEARING_RADIUS - 4;
+    const endLength = half * Math.SQRT2;
+    for (let length = startLength; length <= endLength; length += 10) {
+      const along = length / Math.SQRT2;
+      const wave = Math.sin(length / 45 + cornerX * 1.3 + cornerY * 0.7) * GARDEN_PATH_WAVE;
+      // Sideways is perpendicular to the diagonal
+      const x = cornerX * along + (-cornerY / Math.SQRT2) * wave;
+      const y = cornerY * along + (cornerX / Math.SQRT2) * wave;
+      points.push([centre + toPixel(x), centre - toPixel(y)]);
+    }
+    for (const [width, alpha] of [
+      [GARDEN_PATH_WIDTH * 1.6, 0.25],
+      [GARDEN_PATH_WIDTH, 0.55],
+    ]) {
+      context.globalAlpha = alpha;
+      context.lineWidth = toPixel(width);
+      context.beginPath();
+      points.forEach(([x, y], index) => (index === 0 ? context.moveTo(x, y) : context.lineTo(x, y)));
+      context.stroke();
+    }
+  }
+
+  // The sandy clearing around the flower: solid in the middle, softening into the grass at its edge
+  context.globalAlpha = 1;
+  const inner = toPixel(GARDEN_CLEARING_RADIUS);
+  const outer = toPixel(GARDEN_CLEARING_RADIUS + GARDEN_CLEARING_FADE);
+  const fade = context.createRadialGradient(centre, centre, inner * 0.8, centre, centre, outer);
+  fade.addColorStop(0, clearing);
+  fade.addColorStop(1, `${clearing}00`);
+  context.fillStyle = fade;
+  context.beginPath();
+  context.arc(centre, centre, outer, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = clearing;
+  context.beginPath();
+  context.arc(centre, centre, inner * 0.8, 0, Math.PI * 2);
+  context.fill();
+
+  // A faint stone-ring line inside the clearing, framing the flower
+  context.globalAlpha = 0.3;
+  context.strokeStyle = path;
+  context.lineWidth = toPixel(3);
+  context.beginPath();
+  context.arc(centre, centre, toPixel(GARDEN_CLEARING_RING), 0, Math.PI * 2);
+  context.stroke();
+
+  // Tiny warm flower specks out in the grass, away from the clearing and the paths
+  context.globalAlpha = 0.85;
+  context.fillStyle = flowerSpeck;
+  let placed = 0;
+  while (placed < GARDEN_FLOWER_SPECKS) {
+    const x = (random() - 0.5) * size;
+    const y = (random() - 0.5) * size;
+    const nearDiagonal = Math.abs(Math.abs(x) - Math.abs(y)) / Math.SQRT2 < GARDEN_PATH_WIDTH * 1.5;
+    if (Math.hypot(x, y) < GARDEN_CLEARING_RADIUS + 30 || nearDiagonal) continue;
+    context.fillRect(Math.floor(centre + toPixel(x)), Math.floor(centre - toPixel(y)), 1, 1);
+    placed += 1;
+  }
+
+  // A faint hint of the 20-unit hop grid: alternate tiles very slightly darker, over everything
+  context.globalAlpha = GARDEN_GRID_ALPHA;
+  context.fillStyle = '#000000';
+  const tile = toPixel(tileSize);
+  const tiles = Math.round(size / tileSize);
+  for (let row = 0; row < tiles; row++) {
+    for (let column = 0; column < tiles; column++) {
+      if ((row + column) % 2 === 0) context.fillRect(column * tile, row * tile, tile, tile);
+    }
+  }
+
+  context.globalAlpha = 1;
   return canvas;
 }
 
