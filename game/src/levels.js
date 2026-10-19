@@ -105,9 +105,9 @@ export const LEVELS = [
     crabs: {
       target: 'flower',
       phases: [
-        { start: 0, interval: 8, max: 2, coopMax: 3 },
-        { start: 25, interval: 6, max: 3, coopMax: 4 },
-        { start: 50, interval: 4.5, max: 4, coopMax: 5 },
+        { start: 0, interval: 7, max: 2, coopMax: 3 },
+        { start: 25, interval: 5, max: 3, coopMax: 4 },
+        { start: 50, interval: 3.5, max: 5, coopMax: 6 },
       ],
     },
     octopus: null,
