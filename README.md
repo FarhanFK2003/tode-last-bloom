@@ -3,6 +3,8 @@
 A 3D browser game about a frog defending the last magical flower, built with [Three.js](https://threejs.org/) and
 [Vite](https://vite.dev/).
 
+**Play Online:** [Play Tode: Last Bloom](https://tode-last-bloom.vercel.app/)
+
 Tode: Last Bloom is a personal entry for the JetBrains Academy **Build Your Game Challenge**. It started from the
 Tode the Frog project in the JetBrains Academy course
 [Build a Game with an AI Coding Agent](https://academy.jetbrains.com/course/30327) and extends it into a four-level
