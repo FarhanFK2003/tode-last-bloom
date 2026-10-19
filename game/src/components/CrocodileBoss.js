@@ -34,7 +34,7 @@ const LAGOON_SPOT = { x: -180, y: 35 }; // where it waits under the water, facin
 const EMERGE_SPOT = { x: -50, y: 35 }; // where it climbs out to, clear of the water and the player starts
 const SUNK_Z = -26; // fully under the water
 
-const HEALTH = { single: 12, coop: 16 };
+const HEALTH = { single: 10, coop: 16 }; // hits to defeat it, by game mode
 const INTRO_TIME = 3; // seconds
 const RISE_TIME = 1.6;
 const ROAR_TIME = [1.6, 2.6]; // the jaw opens wide in this part of the intro
