@@ -43,8 +43,8 @@ const shown = {
 };
 
 const PULSE_LABELS = {
-  single: ['Pulse [E]'],
-  coop: ['P1 Pulse [E]', 'P2 Pulse [Q]'],
+  single: ['Pulse [M]'],
+  coop: ['P1 Pulse [M]', 'P2 Pulse [E]'],
 };
 
 // Top-left panel with the flower health bar and Tode's life pips, plus the timer, wave and level at the top right
@@ -193,7 +193,7 @@ function updateBossHud(boss) {
   }
 }
 
-// 'single': one 'Pulse [E]' row, exactly as before. 'coop': coloured 'P1 Pulse [E]' and 'P2 Pulse [Q]' rows.
+// 'single': one 'Pulse [M]' row. 'coop': coloured 'P1 Pulse [M]' and 'P2 Pulse [E]' rows.
 export function setHudMode(mode) {
   const labels = PULSE_LABELS[mode];
   pulseRowCount = labels.length;

@@ -59,6 +59,9 @@ export function createMenu({ onPlay }) {
       createButton('Back', back),
     ),
   };
+  // The two text-heavy screens are wider, so their content fits without scrolling (see .menu-panel-wide)
+  panels.howToPlay.classList.add('menu-panel-wide');
+  panels.credits.classList.add('menu-panel-wide');
 
   overlay.append(...Object.values(panels));
   document.body.appendChild(overlay);
@@ -70,10 +73,10 @@ function createControls() {
   for (const [keys, action] of [
     ['Arrow keys', 'Hop (Player 1)'],
     ['Space', 'Attack the bees around Tode (Player 1)'],
-    ['E', 'Bloom Pulse: push bees away from the flower (Player 1)'],
+    ['M', 'Bloom Pulse: push bees away from the flower (Player 1)'],
     ['W A S D', 'Hop (Player 2, co-op)'],
     ['F', 'Attack (Player 2, co-op)'],
-    ['Q', 'Bloom Pulse (Player 2, co-op)'],
+    ['E', 'Bloom Pulse (Player 2, co-op)'],
     ['Esc', 'Pause'],
   ]) {
     const term = document.createElement('dt');

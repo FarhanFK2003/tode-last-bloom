@@ -148,7 +148,7 @@ body {
   display: none;
 }
 
-/* Co-op: wider labels for 'P1 Pulse [E]' / 'P2 Pulse [Q]', coloured like each player's attack circle */
+/* Co-op: wider labels for 'P1 Pulse [M]' / 'P2 Pulse [E]', coloured like each player's attack circle */
 .hud.coop .hud-label {
   width: 125px;
 }
@@ -731,6 +731,24 @@ body[data-state='menu'] .boss-banner {
 
 .menu-controls dd {
   margin: 0;
+}
+
+/* How to Play and Credits: wider than the other menu screens wherever the window allows, with slightly tighter
+   spacing, so their text wraps less and fits without scrolling. On small windows they still fit the window
+   (and scroll as a last resort, never cutting anything off). Their Back button keeps the usual width. */
+.menu-panel.menu-panel-wide {
+  width: min(720px, 94vw);
+  gap: 10px;
+  padding: 26px 32px;
+}
+
+.menu-panel-wide .menu-button {
+  width: min(100%, 348px);
+}
+
+.menu-panel-wide .menu-credit {
+  font-size: 15px;
+  line-height: 1.35;
 }
 
 /* Settings: volume sliders and mute */

@@ -401,14 +401,14 @@ createInput({
     ArrowLeft: () => queueHop(playerOne.player, 'left'),
     ArrowRight: () => queueHop(playerOne.player, 'right'),
     Space: () => requestAttack(playerOne.attack),
-    KeyE: () => requestPulse(playerOne.pulse),
+    KeyM: () => requestPulse(playerOne.pulse),
     // Player 2: only acts in co-op
     KeyW: () => gameMode === 'coop' && queueHop(playerTwo.player, 'up'),
     KeyS: () => gameMode === 'coop' && queueHop(playerTwo.player, 'down'),
     KeyA: () => gameMode === 'coop' && queueHop(playerTwo.player, 'left'),
     KeyD: () => gameMode === 'coop' && queueHop(playerTwo.player, 'right'),
     KeyF: () => gameMode === 'coop' && requestAttack(playerTwo.attack),
-    KeyQ: () => gameMode === 'coop' && requestPulse(playerTwo.pulse),
+    KeyE: () => gameMode === 'coop' && requestPulse(playerTwo.pulse),
   },
   ui: {
     Escape: handleEscape,
