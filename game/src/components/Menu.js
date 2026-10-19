@@ -41,14 +41,11 @@ export function createMenu({ onPlay }) {
     ),
     howToPlay: createPanel(
       createHeading('How to Play'),
-      createText(
-        'Bees are coming for the magical flower in the middle of the garden. Keep it alive for two minutes to win.',
-      ),
+      createText('Protect the magical flower from waves of enemies. Survive each level and defeat Snapjaw!'),
+      createLevels(),
       createControls(),
-      createText(
-        'Every bee touching the flower bites it. The flower has 20 HP, and you have 3 lives (shared by both players ' +
-          'in co-op); each touch from a bee costs a life. A new, stronger wave of bees arrives every 30 seconds.',
-      ),
+      createText('Solo: 3 lives · Co-op: 6 shared lives'),
+      createText('Collect pickups, defeat enemies, and score points!'),
       createText('Some keyboards cannot register many keys at once, so a few key combinations may not work together.', 'menu-note'),
       createButton('Back', back),
     ),
@@ -67,23 +64,38 @@ export function createMenu({ onPlay }) {
   document.body.appendChild(overlay);
 }
 
+// The four levels and what comes for the flower in each
+function createLevels() {
+  return createTermList([
+    ['Garden · 60 s', 'Dodge the bees!'],
+    ['Coast · 75 s', 'Stop crabs from reaching the flower.'],
+    ['Pond · 90 s', 'Fight bees, chasing crabs, and the ink-lobbing octopus.'],
+    ['Lagoon', 'No timer! Strike Snapjaw when it is dizzy after a charge.'],
+  ]);
+}
+
 function createControls() {
-  const list = document.createElement('dl');
-  list.className = 'menu-controls';
-  for (const [keys, action] of [
-    ['Arrow keys', 'Hop (Player 1)'],
-    ['Space', 'Attack the bees around Tode (Player 1)'],
-    ['M', 'Bloom Pulse: push bees away from the flower (Player 1)'],
-    ['W A S D', 'Hop (Player 2, co-op)'],
+  return createTermList([
+    ['Arrow keys', 'Move (Player 1)'],
+    ['Space', 'Attack (Player 1)'],
+    ['M', 'Bloom Pulse (Player 1)'],
+    ['W A S D', 'Move (Player 2, co-op)'],
     ['F', 'Attack (Player 2, co-op)'],
     ['E', 'Bloom Pulse (Player 2, co-op)'],
     ['Esc', 'Pause'],
-  ]) {
-    const term = document.createElement('dt');
-    term.textContent = keys;
+  ]);
+}
+
+// A two-column list of [term, description] rows, styled like the controls list
+function createTermList(rows) {
+  const list = document.createElement('dl');
+  list.className = 'menu-controls';
+  for (const [term, text] of rows) {
+    const title = document.createElement('dt');
+    title.textContent = term;
     const description = document.createElement('dd');
-    description.textContent = action;
-    list.append(term, description);
+    description.textContent = text;
+    list.append(title, description);
   }
   return list;
 }
