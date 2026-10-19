@@ -57,13 +57,85 @@ function loadTemplate() {
   return templatePromise;
 }
 
-const WHITE = new THREE.Color(0xffffff);
+// Recolouring Tode's green skin (see recolourSkin): which texture pixels count as skin, and how bright the new
+// colour is made compared with the green it replaces
+const SKIN_HUES = [80, 200]; // degrees: Tode's greens are around 140-160
+const SKIN_MIN_SATURATION = 0.12; // greyer pixels (the eyes, mouth and dark outlines) are left exactly as they are
+const SKIN_MIN_LIGHTNESS = 0.08; // and so are the near-black ones, so dark outlines stay exactly as they were
+const SKIN_BRIGHTNESS = 1.35;
+
+// Recoloured copies of the template's texture, one per skin colour, made once and shared by every player using it
+const skinTextures = new Map();
+
+// A copy of `texture` with its green skin turned to `color` (a hex number), leaving every other pixel as it is.
+// Each skin pixel keeps its brightness (so the texture's shading stays) and takes the new colour's hue in
+// proportion to how green it was, so soft edges blend smoothly. The copy has its own image but every other
+// setting of the original (colour space, orientation, wrapping, filtering), which is never changed.
+function recolourSkin(texture, color) {
+  const image = texture.image;
+  const canvas = document.createElement('canvas');
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext('2d');
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  const data = pixels.data;
+
+  // The new colour's red, green and blue, as the 0-255 values the texture's pixels use
+  const [tr, tg, tb] = [(color >> 16) & 255, (color >> 8) & 255, color & 255];
+  const targetLuma = 0.299 * tr + 0.587 * tg + 0.114 * tb;
+  for (let i = 0; i < data.length; i += 4) {
+    const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+    // The pixel's hue (degrees) and saturation (0-1), as in HSL
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const range = max - min;
+    if (range === 0) continue; // a pure grey: never skin
+    const lightness = (max + min) / 510;
+    if (lightness < SKIN_MIN_LIGHTNESS) continue;
+    const saturation = range / 255 / (1 - Math.abs(2 * lightness - 1));
+    let hue;
+    if (max === r) hue = 60 * (((g - b) / range + 6) % 6);
+    else if (max === g) hue = 60 * ((b - r) / range + 2);
+    else hue = 60 * ((r - g) / range + 4);
+    if (hue < SKIN_HUES[0] || hue > SKIN_HUES[1] || saturation < SKIN_MIN_SATURATION) continue;
+    // The new colour at this pixel's brightness, blended from grey by how saturated the pixel was
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    const scale = (luma * SKIN_BRIGHTNESS) / targetLuma;
+    const amount = Math.min(saturation, 1);
+    data[i] = Math.min(255, luma + (tr * scale - luma) * amount);
+    data[i + 1] = Math.min(255, luma + (tg * scale - luma) * amount);
+    data[i + 2] = Math.min(255, luma + (tb * scale - luma) * amount);
+  }
+  context.putImageData(pixels, 0, 0);
+
+  const copy = texture.clone();
+  copy.source = new THREE.Source(canvas); // its own image: a plain clone would share the original's
+  copy.needsUpdate = true;
+  return copy;
+}
+
+// The template's texture recoloured for `color`, made the first time it is asked for. If it can't be made (no
+// texture, or the canvas fails), returns null and the player keeps the usual look.
+function getSkinTexture(texture, color) {
+  if (!skinTextures.has(color)) {
+    let copy = null;
+    try {
+      if (texture?.image) copy = recolourSkin(texture, color);
+    } catch (error) {
+      console.error('Could not recolour Tode; this player keeps the usual colours', error);
+    }
+    skinTextures.set(color, copy);
+  }
+  return skinTextures.get(color);
+}
 
 // A player is a Group (moved on the ground) holding its own copy of the model.
 // Everything that belongs to one player lives in player.userData.state.
-// tint (optional) recolours this player's copy only: its material is cloned first, so the shared
-// template, other players and the texture are untouched. tintStrength blends from white (0) to the tint (1).
-export function createPlayer(start, { tint = null, tintStrength = 1 } = {}) {
+// skin (optional, a hex colour) recolours this player's copy only: its material is cloned and given a
+// recoloured copy of the texture (see recolourSkin), so the shared template, other players and the original
+// texture are untouched.
+export function createPlayer(start, { skin = null } = {}) {
   const player = new THREE.Group();
   player.position.set(start.x, start.y, 0);
   player.userData.state = {
@@ -86,13 +158,14 @@ export function createPlayer(start, { tint = null, tintStrength = 1 } = {}) {
   loadTemplate()
     .then((template) => {
       const model = template.model.clone();
-      if (tint !== null) {
-        const color = WHITE.clone().lerp(new THREE.Color(tint), tintStrength);
+      if (skin !== null) {
         model.traverse((object) => {
           if (!object.isMesh) return;
-          // The texture stays shared; only the colour it is multiplied by changes
+          const texture = getSkinTexture(object.material.map, skin);
+          if (!texture) return;
+          // This player's own material, with the recoloured texture; the template's material is untouched
           object.material = object.material.clone();
-          object.material.color.copy(color);
+          object.material.map = texture;
         });
       }
       player.userData.state.model = model;

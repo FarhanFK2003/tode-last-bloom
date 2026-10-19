@@ -123,9 +123,10 @@ const COOP_CAUGHT = { ...OUTCOMES.caught, message: 'The Todes were caught' };
 // Two-player co-op: starting spots either side of the single-player start, Player 2's look and attack colour,
 // and how quickly the camera eases its zoom (seconds)
 const COOP_STARTS = [new THREE.Vector2(-30, -50), new THREE.Vector2(30, -50)];
-const PLAYER_TWO_TINT = 0x40e0d0;
-const PLAYER_TWO_TINT_STRENGTH = 0.6;
-const PLAYER_TWO_ATTACK_COLOR = 0x40e0d0;
+// Player 2 is orange: its skin, and a matching attack circle (the HUD's P2 colour in style.css is a darker shade
+// of the same orange, so its text stays readable)
+const PLAYER_TWO_SKIN = 0xff8a1f;
+const PLAYER_TWO_ATTACK_COLOR = 0xff8a1f;
 const CAMERA_ZOOM_SMOOTHING = 0.25;
 
 const scene = new THREE.Scene();
@@ -157,8 +158,8 @@ createCrocodileBoss(scene);
 
 // Everything one player owns: Tode's group (position, model, movement), its attack, its pulse ability
 // and its Nectar Boost
-function createPlayerSlot(start, { tint, tintStrength, attackColor } = {}) {
-  const player = createPlayer(start, { tint, tintStrength });
+function createPlayerSlot(start, { skin, attackColor } = {}) {
+  const player = createPlayer(start, { skin });
   return {
     player,
     attack: createAttack(player, attackColor),
@@ -172,8 +173,7 @@ function createPlayerSlot(start, { tint, tintStrength, attackColor } = {}) {
 // Both players are created once, when the game loads. Player 2 only joins the scene in co-op.
 const playerOne = createPlayerSlot(PLAYER_START);
 const playerTwo = createPlayerSlot(COOP_STARTS[1], {
-  tint: PLAYER_TWO_TINT,
-  tintStrength: PLAYER_TWO_TINT_STRENGTH,
+  skin: PLAYER_TWO_SKIN,
   attackColor: PLAYER_TWO_ATTACK_COLOR,
 });
 const allPlayers = [playerOne, playerTwo];
