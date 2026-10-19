@@ -26,19 +26,20 @@
 //                    if fewer than `max` are active (the same in co-op)
 //   boss:            true on the boss level: Snapjaw the crocodile appears (see CrocodileBoss.js)
 
-// The original waves, unchanged, used by the Garden
+// The Garden's waves: the original intervals and caps, each wave now lasting 15 seconds of its 60-second level
 const GARDEN_WAVES = [
   { start: 0, spawnInterval: 3.0, maxActive: 8 },
-  { start: 30, spawnInterval: 2.2, maxActive: 12 },
-  { start: 60, spawnInterval: 1.6, maxActive: 16 },
-  { start: 90, spawnInterval: 1.1, maxActive: 20 },
+  { start: 15, spawnInterval: 2.2, maxActive: 12 },
+  { start: 30, spawnInterval: 1.6, maxActive: 16 },
+  { start: 45, spawnInterval: 1.1, maxActive: 20 },
 ];
 
 // The later levels follow the Garden's waves, wave by wave:
 //   spawnInterval: the Garden's interval x 0.85 (Coast, about 15 % faster) or x 0.75 (Pond, 25 % faster),
 //                  rounded to the nearest 0.01 s, with halves rounded up (1.1 x 0.85 = 0.935 -> 0.94)
 //   maxActive:     the Garden's cap + 2 (Coast) or + 3 (Pond)
-// (Not used while the Coast is crabs only; kept unchanged in case bees return there.)
+//   start:         spread evenly over the level's own length (the Pond's 90 seconds: about every 22 seconds)
+// (Not used while the Coast is crabs only; kept unchanged, with its old 120-second timing, in case bees return.)
 const COAST_WAVES = [
   { start: 0, spawnInterval: 2.55, maxActive: 10 },
   { start: 30, spawnInterval: 1.87, maxActive: 14 },
@@ -48,9 +49,9 @@ const COAST_WAVES = [
 
 const POND_WAVES = [
   { start: 0, spawnInterval: 2.25, maxActive: 11 },
-  { start: 30, spawnInterval: 1.65, maxActive: 15 },
-  { start: 60, spawnInterval: 1.2, maxActive: 19 },
-  { start: 90, spawnInterval: 0.83, maxActive: 23 },
+  { start: 22, spawnInterval: 1.65, maxActive: 15 },
+  { start: 45, spawnInterval: 1.2, maxActive: 19 },
+  { start: 67, spawnInterval: 0.83, maxActive: 23 },
 ];
 
 // The Pond's world and look, shared by the Pond and the boss level
@@ -81,7 +82,7 @@ export const LEVELS = [
     features: 'garden',
     // The map edge keeps Tode on the meadow in single player too, as on the other levels
     mapEdge: true,
-    duration: 120,
+    duration: 60,
     startDifficulty: 0,
     waves: GARDEN_WAVES,
     crabs: null,
@@ -96,7 +97,7 @@ export const LEVELS = [
     background: '#BFE6FF',
     features: 'coast',
     mapEdge: true,
-    duration: 120,
+    duration: 75,
     startDifficulty: 0.3,
     // Crabs only: no bees (not even the four starting ones). The crabs go for the flower, coming faster and in
     // greater numbers as the level goes on.
@@ -114,11 +115,11 @@ export const LEVELS = [
   {
     name: 'Pond',
     ...POND_WORLD,
-    duration: 120,
+    duration: 90,
     startDifficulty: 0.6,
     waves: POND_WAVES,
-    crabs: { start: 20, interval: 25, max: 2, coopMax: 2 },
-    octopus: { start: 45, interval: 30, max: 1 },
+    crabs: { start: 15, interval: 20, max: 2, coopMax: 2 },
+    octopus: { start: 30, interval: 25, max: 1 },
   },
   // The boss fight, in the Pond's own world (shared, not rebuilt). No timer and no bees for now.
   {
