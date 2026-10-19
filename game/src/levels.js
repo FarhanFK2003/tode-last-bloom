@@ -20,7 +20,8 @@
 //                    (`coopMax` in co-op). Instead of one schedule it may give `phases` by elapsed level time, each
 //                    { start, interval, max, coopMax } in effect from its start (the first crab comes at the first
 //                    phase's start). `target`: 'players' (the default: crabs hunt the nearest player) or 'flower'
-//                    (crabs go for the flower and bite it, and never cost a life; see Crab.js)
+//                    (crabs go for the flower and bite it, and never cost a life; see Crab.js). `face: 'flower'`
+//                    turns player-hunting crabs to face the flower, without changing what they hunt or hurt
 //   octopus:         Ink Octopus schedule, or null for none: `start` is when the first octopus appears (its first
 //                    lob comes a little after it reaches its spot), then every `interval` seconds another appears
 //                    if fewer than `max` are active (the same in co-op)
@@ -118,7 +119,8 @@ export const LEVELS = [
     duration: 90,
     startDifficulty: 0.6,
     waves: POND_WAVES,
-    crabs: { start: 15, interval: 20, max: 2, coopMax: 2 },
+    // Its crabs hunt the players, facing the flower
+    crabs: { start: 15, interval: 20, max: 2, coopMax: 2, face: 'flower' },
     octopus: { start: 30, interval: 25, max: 1 },
   },
   // The boss fight, in the Pond's own world (shared, not rebuilt). No timer and no bees for now.

@@ -335,8 +335,9 @@ function currentCrabSchedule(crabs) {
   return schedule;
 }
 
-// Spawns a crab at a random free spot, hunting `target` ('players' or 'flower'); returns false if none is free
-function spawnCrab(target) {
+// Spawns a crab at a random free spot for the level's crab settings (what it hunts, and whether it faces the
+// flower; see crabs in levels.js); returns false if none is free
+function spawnCrab({ target, face }) {
   const distance = (object, point) => Math.hypot(object.position.x - point.x, object.position.y - point.y);
   const free = CRAB_SPAWN_POINTS.filter(
     (point) =>
@@ -346,7 +347,7 @@ function spawnCrab(target) {
   );
   if (free.length === 0) return false;
 
-  const crab = createCrab(free[Math.floor(Math.random() * free.length)], { target });
+  const crab = createCrab(free[Math.floor(Math.random() * free.length)], { target, faceFlower: face === 'flower' });
   enemies.push(crab);
   scene.add(crab);
   return true;
@@ -774,7 +775,7 @@ function updateGame(delta) {
     const schedule = currentCrabSchedule(crabs);
     const cap = activePlayers.length > 1 ? schedule.coopMax : schedule.max;
     if (enemies.filter(isCrab).length >= cap) crabTimer = schedule.interval;
-    else crabTimer = spawnCrab(crabs.target) ? schedule.interval : CRAB_RETRY_DELAY;
+    else crabTimer = spawnCrab(crabs) ? schedule.interval : CRAB_RETRY_DELAY;
   }
 
   // The Ink Octopus follows its own schedule too (only on the Pond)

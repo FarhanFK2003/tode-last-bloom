@@ -9,6 +9,8 @@ import { updateKnockback } from './Enemy.js';
 // A crab made with target 'flower' (the Coast's) hunts the flower instead: it always faces the flower, scuttles
 // towards it and, once there, bites it once every BITE_INTERVAL while it stays in reach. It never costs a life:
 // it is harmless to touch (players still bump into it) and running into a player only stops its scuttle.
+// A crab made with faceFlower (the Pond's) keeps hunting players exactly as above, but turns to face the flower
+// like the Coast's crabs, instead of turning its side to each scuttle.
 // For now the crab is built from simple shapes (no model).
 
 const RADIUS = 11; // collision radius, about the size of a bee
@@ -51,8 +53,10 @@ export function isCrab(enemy) {
 }
 
 // A crab at `position`, facing -Y (like the bee); its sideways direction is local X.
-// target: 'players' (hunts the nearest player) or 'flower' (hunts and bites the flower; see the top of this file)
-export function createCrab(position, { target = 'players' } = {}) {
+// target: 'players' (hunts the nearest player) or 'flower' (hunts and bites the flower; see the top of this file).
+// faceFlower: whether it always faces the flower (only how it turns: what it hunts and hurts stays as `target`
+// says). A flower-hunting crab always does.
+export function createCrab(position, { target = 'players', faceFlower: facesFlower = false } = {}) {
   const parts = getShared();
   const crab = new THREE.Group();
   crab.position.set(position.x, position.y, 0);
@@ -100,6 +104,7 @@ export function createCrab(position, { target = 'players' } = {}) {
   crab.userData = {
     type: 'crab',
     target,
+    facesFlower: facesFlower || target === 'flower',
     // A flower-hunting crab is always safe to touch (see isHarmless in Enemy.js)
     harmless: target === 'flower',
     biteTimer: 0,
@@ -196,12 +201,19 @@ function startBiting(state) {
 // Returns 'player' when a scuttle runs into a player, 'warn' on the frame the claws go up (for the sound),
 // and null otherwise. context: { flower, players, enemies, houses, bounds (the map's half-size), speedScale }.
 export function updateCrab(crab, delta, context) {
+  const result = moveCrab(crab, delta, context);
+  // A crab that faces the flower does so whatever it is doing; turned after this frame's movement, so it faces
+  // the flower exactly from where it now is
+  if (crab.userData.facesFlower) faceFlower(crab, context.flower);
+  return result;
+}
+
+// One frame of the crab's behaviour (see updateCrab)
+function moveCrab(crab, delta, context) {
   const state = crab.userData;
   const { flower, players, enemies, houses, bounds, speedScale } = context;
   state.age += delta;
   const huntsFlower = state.target === 'flower';
-  // A flower-hunting crab faces the flower whatever it is doing
-  if (huntsFlower) faceFlower(crab, flower);
 
   // Bloom Pulse pushes it away from the flower like a bee; it is harmless meanwhile
   if (updateKnockback(crab, flower, delta, { players, enemies, houses })) {
@@ -228,9 +240,9 @@ export function updateCrab(crab, delta, context) {
       const direction = target && chooseDirection(crab, target, houses, bounds);
       if (direction) {
         state.direction.set(direction[0], direction[1]);
-        // A player-hunting crab turns sideways to the scuttle (it faces -Y locally and walks along its local X);
-        // a flower-hunting one keeps facing the flower and scuttles towards it
-        if (!huntsFlower) crab.rotation.z = Math.atan2(direction[1], direction[0]);
+        // Otherwise a crab turns sideways to the scuttle (it faces -Y locally and walks along its local X); one
+        // that faces the flower keeps facing it while it scuttles
+        if (!state.facesFlower) crab.rotation.z = Math.atan2(direction[1], direction[0]);
         setPhase(state, 'warn', WARNING_TIME);
         result = 'warn';
       } else {
