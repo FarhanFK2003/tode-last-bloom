@@ -86,7 +86,9 @@ export const LEVELS = [
   {
     name: 'Coast',
     world: 'coast',
-    groundColors: ['#E2B866', '#F6E2B0'],
+    // Warm beach sand: sand, light and dark drifts, damp sand along the edge, shell and pebble dots
+    groundColors: ['#EDD39C', '#F6E4BC', '#D9BC84', '#C9A673', '#FFF6EA', '#A39684'],
+    groundPattern: 'coast',
     background: '#BFE6FF',
     features: 'coast',
     mapEdge: true,

@@ -18,17 +18,35 @@ const GARDEN_PATH_WIDTH = 16;
 const GARDEN_PATH_WAVE = 6; // the paths meander a little either side of the diagonals
 const GARDEN_GRID_ALPHA = 0.035; // alternate hop tiles are this much darker: a hint of the grid, not a checkerboard
 
+// Coast ground: painted like the Garden's, one canvas pixel per COAST_UNITS_PER_PIXEL world units. Sizes in world
+// units unless marked as pixels.
+const COAST_UNITS_PER_PIXEL = 2;
+const COAST_SEED = 37;
+const COAST_DRIFTS = 60; // soft lighter and darker drifts of sand
+const COAST_RIPPLES = 240; // short wind-ripple streaks
+const COAST_RIPPLE_ANGLE = 0.5; // radians: the wind lays them all roughly the same way
+const COAST_SHELLS = 70; // tiny pale shell dots
+const COAST_PEBBLES = 110; // tiny grey pebble dots
+const COAST_DAMP_WIDTH = 22; // darker damp sand along the edge, meeting the foam beyond it
+const COAST_DAMP_WAVE = 7; // the damp band's inner edge wanders in and out by up to this
+const COAST_DAMP_STRENGTH = 0.55; // how dark it gets right at the edge (0: dry, 1: the damp colour)
+const COAST_GRID_ALPHA = 0.025; // an even fainter hint of the hop grid than the Garden's
+
 // The ground, given by the level:
 //   'checker': a checkerboard of two alternating colours ([dark, light]), one tile per tileSize
 //   'meadow':  a base colour with irregular lighter patches and darker speckles ([base, patch, speckle])
 //   'garden':  the Garden's meadow: grass with soft lighter and darker drifts, a sandy clearing around the
 //              flower, four meandering paths to the corners and a faint hint of the hop grid
 //              ([grass, light grass, dark grass, speckle, path, clearing, flower speck])
+//   'coast':   the Coast's beach: sand with soft drifts, wind ripples, a few tiny shells and pebbles, darker damp
+//              sand along the edge and a faint hint of the hop grid
+//              ([sand, light sand, dark sand, damp sand, shell, pebble])
 export function createMap(size, tileSize, colors, pattern = 'checker') {
   const map = new THREE.Group();
   let canvas;
   if (pattern === 'meadow') canvas = paintMeadow(colors);
   else if (pattern === 'garden') canvas = paintGarden(size, tileSize, colors);
+  else if (pattern === 'coast') canvas = paintCoast(size, tileSize, colors);
   else canvas = paintChecker(Math.round(size / tileSize), colors);
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -188,6 +206,106 @@ function paintGarden(size, tileSize, [grass, lightGrass, darkGrass, speckle, pat
     }
   }
 
+  context.globalAlpha = 1;
+  return canvas;
+}
+
+// The Coast's beach. Like the Garden's, the canvas covers the map exactly, one pixel per COAST_UNITS_PER_PIXEL
+// world units, and everything is only colour on the ground.
+function paintCoast(size, tileSize, [sand, lightSand, darkSand, damp, shell, pebble]) {
+  const scale = COAST_UNITS_PER_PIXEL;
+  const pixels = Math.round(size / scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = pixels;
+  canvas.height = pixels;
+  const context = canvas.getContext('2d');
+  const random = createRandom(COAST_SEED);
+
+  context.fillStyle = sand;
+  context.fillRect(0, 0, pixels, pixels);
+
+  // Soft drifts of lighter and darker sand: low-opacity clusters of round blobs
+  for (let i = 0; i < COAST_DRIFTS; i++) {
+    context.fillStyle = i % 2 === 0 ? lightSand : darkSand;
+    context.globalAlpha = 0.25 + random() * 0.2;
+    const x = random() * pixels;
+    const y = random() * pixels;
+    for (let blob = 0; blob < 5; blob++) {
+      context.beginPath();
+      context.arc(x + (random() - 0.5) * 24, y + (random() - 0.5) * 24, 4 + random() * 8, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+
+  // Wind ripples: short, gently bent, faint streaks, all running roughly the same way
+  context.strokeStyle = darkSand;
+  context.lineWidth = 1;
+  context.lineCap = 'round';
+  for (let i = 0; i < COAST_RIPPLES; i++) {
+    context.globalAlpha = 0.12 + random() * 0.12;
+    const x = random() * pixels;
+    const y = random() * pixels;
+    const half = 3 + random() * 5; // pixels
+    const angle = COAST_RIPPLE_ANGLE + (random() - 0.5) * 0.4;
+    const bend = (random() - 0.5) * 3;
+    const dx = Math.cos(angle) * half;
+    const dy = Math.sin(angle) * half;
+    context.beginPath();
+    context.moveTo(x - dx, y - dy);
+    context.quadraticCurveTo(x - Math.sin(angle) * bend, y + Math.cos(angle) * bend, x + dx, y + dy);
+    context.stroke();
+  }
+
+  // A few tiny shells and pebbles
+  for (const [count, color, alpha] of [
+    [COAST_SHELLS, shell, 0.9],
+    [COAST_PEBBLES, pebble, 0.7],
+  ]) {
+    context.globalAlpha = alpha;
+    context.fillStyle = color;
+    for (let i = 0; i < count; i++) {
+      context.fillRect(Math.floor(random() * pixels), Math.floor(random() * pixels), 1, 1);
+    }
+  }
+  context.globalAlpha = 1;
+
+  // Damp sand along the edge, meeting the foam: each pixel is darkened towards the damp colour by how close it is
+  // to its nearest edges. Each side's band wanders in and out on its own, and where two sides meet at a corner
+  // the darker of the two is kept, so the corners join without a seam.
+  const image = context.getImageData(0, 0, pixels, pixels);
+  const data = image.data;
+  // The damp colour's red, green and blue as canvas values (0-255), read straight from its '#RRGGBB' hex
+  const dampRGB = [0, 1, 2].map((c) => parseInt(damp.slice(1 + c * 2, 3 + c * 2), 16));
+  const bandWidth = (along, side) =>
+    COAST_DAMP_WIDTH + Math.sin(along / 37 + side * 1.7) * COAST_DAMP_WAVE + Math.sin(along / 13 + side) * 2;
+  for (let row = 0; row < pixels; row++) {
+    for (let column = 0; column < pixels; column++) {
+      const x = (column + 0.5) * scale; // world units from the left and top edges of the map
+      const y = (row + 0.5) * scale;
+      const near = Math.max(
+        1 - x / bandWidth(y, 0),
+        1 - (size - x) / bandWidth(y, 1),
+        1 - y / bandWidth(x, 2),
+        1 - (size - y) / bandWidth(x, 3),
+      );
+      if (near <= 0) continue;
+      const amount = near * near * COAST_DAMP_STRENGTH;
+      const index = (row * pixels + column) * 4;
+      for (let c = 0; c < 3; c++) data[index + c] += (dampRGB[c] - data[index + c]) * amount;
+    }
+  }
+  context.putImageData(image, 0, 0);
+
+  // A very faint hint of the 20-unit hop grid: alternate tiles very slightly darker, over everything
+  context.globalAlpha = COAST_GRID_ALPHA;
+  context.fillStyle = '#000000';
+  const tile = tileSize / scale;
+  const tiles = Math.round(size / tileSize);
+  for (let row = 0; row < tiles; row++) {
+    for (let column = 0; column < tiles; column++) {
+      if ((row + column) % 2 === 0) context.fillRect(column * tile, row * tile, tile, tile);
+    }
+  }
   context.globalAlpha = 1;
   return canvas;
 }

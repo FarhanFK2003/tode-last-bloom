@@ -7,6 +7,7 @@ const CREDITS = [
   'Butterfly by Poly by Google (CC-BY 3.0) via Poly Pizza',
   'Rabbit by Poly by Google (CC-BY 3.0) via Poly Pizza',
   'Lighthouse scene by Poly by Google (CC-BY 3.0) via Poly Pizza',
+  'Dolphin by Poly by Google (CC-BY 3.0) via Poly Pizza',
   'Tode the Frog from the JetBrains Academy course "Build a Game with an AI Coding Agent"',
 ];
 
