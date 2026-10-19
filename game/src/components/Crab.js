@@ -6,6 +6,9 @@ import { updateKnockback } from './Enemy.js';
 // the map's axes (like Tode's hops), and before every scuttle it stops and raises its claws for WARNING_TIME,
 // so players can see it coming. Its shell takes two hits: the first cracks it and stuns it, harmless, for
 // STUN_TIME; the second defeats it. Running into a player costs a life, under the usual invulnerability rules.
+// A crab made with target 'flower' (the Coast's) hunts the flower instead: it always faces the flower, scuttles
+// towards it and, once there, bites it once every BITE_INTERVAL while it stays in reach. It never costs a life:
+// it is harmless to touch (players still bump into it) and running into a player only stops its scuttle.
 // For now the crab is built from simple shapes (no model).
 
 const RADIUS = 11; // collision radius, about the size of a bee
@@ -16,6 +19,9 @@ const REST_TIME = 0.3; // seconds of rest after each scuttle
 const STUN_TIME = 1.5; // seconds stunned (harmless and still) after the first hit
 const MAX_HEALTH = 2;
 const LOOKAHEAD = 15; // how far ahead a scuttle direction is checked for obstacles before choosing it
+const BITE_INTERVAL = 1; // a flower-hunting crab's seconds between bites (1 HP each), like a bee's
+const BITE_REACH = 8; // how far beyond touching the flower a flower-hunting crab can still bite it
+const SNAP_SPEED = 14; // radians per second of claw snapping while biting
 
 const CLAW_RAISED = -0.9; // claw pivot turn during the warning (negative lifts the claws, which point -Y, upward)
 const BOB_SPEED = 30; // radians per second of body wobble while scuttling
@@ -44,8 +50,9 @@ export function isCrab(enemy) {
   return enemy.userData.type === 'crab';
 }
 
-// A crab at `position`, facing -Y (like the bee); its sideways direction is local X
-export function createCrab(position) {
+// A crab at `position`, facing -Y (like the bee); its sideways direction is local X.
+// target: 'players' (hunts the nearest player) or 'flower' (hunts and bites the flower; see the top of this file)
+export function createCrab(position, { target = 'players' } = {}) {
   const parts = getShared();
   const crab = new THREE.Group();
   crab.position.set(position.x, position.y, 0);
@@ -92,6 +99,10 @@ export function createCrab(position) {
 
   crab.userData = {
     type: 'crab',
+    target,
+    // A flower-hunting crab is always safe to touch (see isHarmless in Enemy.js)
+    harmless: target === 'flower',
+    biteTimer: 0,
     collisionRadius: RADIUS,
     health: MAX_HEALTH,
     stunTime: 0,
@@ -163,12 +174,34 @@ function setPhase(state, phase, time) {
   state.phaseTime = time;
 }
 
+// Turns the crab to face the flower (it faces -Y locally, like the bee)
+function faceFlower(crab, flower) {
+  const dx = flower.position.x - crab.position.x;
+  const dy = flower.position.y - crab.position.y;
+  if (dx !== 0 || dy !== 0) crab.rotation.z = Math.atan2(dx, -dy);
+}
+
+// Whether the crab is close enough to the flower to bite it
+function inBiteReach(crab, flower) {
+  const distance = Math.hypot(flower.position.x - crab.position.x, flower.position.y - crab.position.y);
+  return distance <= RADIUS + (flower.userData.collisionRadius ?? 0) + BITE_REACH;
+}
+
+// Starts biting the flower: the first bite comes after a full BITE_INTERVAL
+function startBiting(state) {
+  state.biteTimer = 0;
+  setPhase(state, 'bite', Infinity);
+}
+
 // Returns 'player' when a scuttle runs into a player, 'warn' on the frame the claws go up (for the sound),
 // and null otherwise. context: { flower, players, enemies, houses, bounds (the map's half-size), speedScale }.
 export function updateCrab(crab, delta, context) {
   const state = crab.userData;
   const { flower, players, enemies, houses, bounds, speedScale } = context;
   state.age += delta;
+  const huntsFlower = state.target === 'flower';
+  // A flower-hunting crab faces the flower whatever it is doing
+  if (huntsFlower) faceFlower(crab, flower);
 
   // Bloom Pulse pushes it away from the flower like a bee; it is harmless meanwhile
   if (updateKnockback(crab, flower, delta, { players, enemies, houses })) {
@@ -188,25 +221,45 @@ export function updateCrab(crab, delta, context) {
   let result = null;
 
   if (state.phase === 'rest' && state.phaseTime <= 0) {
-    const target = nearestPlayer(crab, players);
-    const direction = target && chooseDirection(crab, target, houses, bounds);
-    if (direction) {
-      state.direction.set(direction[0], direction[1]);
-      // Turn sideways to the scuttle: the crab faces -Y locally and walks along its local X
-      crab.rotation.z = Math.atan2(direction[1], direction[0]);
-      setPhase(state, 'warn', WARNING_TIME);
-      result = 'warn';
+    if (huntsFlower && inBiteReach(crab, flower)) {
+      startBiting(state);
     } else {
-      setPhase(state, 'rest', REST_TIME);
+      const target = huntsFlower ? flower : nearestPlayer(crab, players);
+      const direction = target && chooseDirection(crab, target, houses, bounds);
+      if (direction) {
+        state.direction.set(direction[0], direction[1]);
+        // A player-hunting crab turns sideways to the scuttle (it faces -Y locally and walks along its local X);
+        // a flower-hunting one keeps facing the flower and scuttles towards it
+        if (!huntsFlower) crab.rotation.z = Math.atan2(direction[1], direction[0]);
+        setPhase(state, 'warn', WARNING_TIME);
+        result = 'warn';
+      } else {
+        setPhase(state, 'rest', REST_TIME);
+      }
     }
   } else if (state.phase === 'warn' && state.phaseTime <= 0) {
     state.distanceLeft = SCUTTLE_DISTANCE;
     setPhase(state, 'scuttle', Infinity);
   } else if (state.phase === 'scuttle') {
     result = scuttle(crab, delta, { flower, players, enemies, houses, bounds, speedScale });
+  } else if (state.phase === 'bite') {
+    // Biting the flower: one bite for every full BITE_INTERVAL in reach; out of reach, it rests and comes back
+    if (!inBiteReach(crab, flower)) {
+      setPhase(state, 'rest', REST_TIME);
+    } else {
+      state.biteTimer += delta;
+      if (state.biteTimer >= BITE_INTERVAL) {
+        state.biteTimer -= BITE_INTERVAL;
+        result = 'bite';
+      }
+    }
   }
 
-  animate(state, state.phase === 'warn' ? CLAW_RAISED : 0, state.phase === 'scuttle');
+  // Claws: raised for the warning, snapping open and shut while biting, lowered otherwise
+  let clawAngle = 0;
+  if (state.phase === 'warn') clawAngle = CLAW_RAISED;
+  if (state.phase === 'bite') clawAngle = CLAW_RAISED * (0.55 + 0.45 * Math.abs(Math.sin(state.age * SNAP_SPEED)));
+  animate(state, clawAngle, state.phase === 'scuttle');
   return result;
 }
 
@@ -219,15 +272,23 @@ function scuttle(crab, delta, { flower, players, enemies, houses, bounds, speedS
   state.distanceLeft -= step;
 
   const stop = () => setPhase(state, 'rest', REST_TIME);
+  const huntsFlower = state.target === 'flower';
+  const reachedFlower = blocksMove(crab, nextX, nextY, flower);
+  // A flower-hunting crab that reaches the flower starts biting it
+  if (huntsFlower && reachedFlower) {
+    startBiting(state);
+    return null;
+  }
   const outside = Math.abs(nextX) > bounds - RADIUS || Math.abs(nextY) > bounds - RADIUS;
-  if (outside || hitsObstacle(crab, nextX, nextY, houses) || blocksMove(crab, nextX, nextY, flower)) {
+  if (outside || hitsObstacle(crab, nextX, nextY, houses) || reachedFlower) {
     stop();
     return null;
   }
-  // Running into a player is what hurts; the crab then rests before turning toward its target again
+  // A player-hunting crab running into a player costs a life, then rests before turning toward its target
+  // again. A flower-hunting crab is only stopped by the player, which costs nothing.
   if (players.some((player) => blocksMove(crab, nextX, nextY, player))) {
     stop();
-    return 'player';
+    return huntsFlower ? null : 'player';
   }
   // Another enemy in the way: wait this frame, still scuttling
   if (isMoveBlocked(crab, nextX, nextY, enemies)) return null;

@@ -17,7 +17,10 @@
 //                    (an empty list for no bees, not even the four that usually start a level)
 //   crabs:           Sand Crab schedule, separate from the bee waves, or null for none: the first appears `start`
 //                    seconds into the level, then one every `interval` seconds while fewer than `max` are active
-//                    (`coopMax` in co-op)
+//                    (`coopMax` in co-op). Instead of one schedule it may give `phases` by elapsed level time, each
+//                    { start, interval, max, coopMax } in effect from its start (the first crab comes at the first
+//                    phase's start). `target`: 'players' (the default: crabs hunt the nearest player) or 'flower'
+//                    (crabs go for the flower and bite it, and never cost a life; see Crab.js)
 //   octopus:         Ink Octopus schedule, or null for none: `start` is when the first octopus appears (its first
 //                    lob comes a little after it reaches its spot), then every `interval` seconds another appears
 //                    if fewer than `max` are active (the same in co-op)
@@ -35,6 +38,7 @@ const GARDEN_WAVES = [
 //   spawnInterval: the Garden's interval x 0.85 (Coast, about 15 % faster) or x 0.75 (Pond, 25 % faster),
 //                  rounded to the nearest 0.01 s, with halves rounded up (1.1 x 0.85 = 0.935 -> 0.94)
 //   maxActive:     the Garden's cap + 2 (Coast) or + 3 (Pond)
+// (Not used while the Coast is crabs only; kept unchanged in case bees return there.)
 const COAST_WAVES = [
   { start: 0, spawnInterval: 2.55, maxActive: 10 },
   { start: 30, spawnInterval: 1.87, maxActive: 14 },
@@ -94,8 +98,17 @@ export const LEVELS = [
     mapEdge: true,
     duration: 120,
     startDifficulty: 0.3,
-    waves: COAST_WAVES,
-    crabs: { start: 30, interval: 25, max: 1, coopMax: 2 },
+    // Crabs only: no bees (not even the four starting ones). The crabs go for the flower, coming faster and in
+    // greater numbers as the level goes on.
+    waves: [],
+    crabs: {
+      target: 'flower',
+      phases: [
+        { start: 0, interval: 8, max: 2, coopMax: 3 },
+        { start: 25, interval: 6, max: 3, coopMax: 4 },
+        { start: 50, interval: 4.5, max: 4, coopMax: 5 },
+      ],
+    },
     octopus: null,
   },
   {

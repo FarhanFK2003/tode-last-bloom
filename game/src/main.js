@@ -309,8 +309,27 @@ function disposeEnemy(enemy) {
   }
 }
 
-// Spawns a crab at a random free spot; returns false if none is free
-function spawnCrab() {
+// When a level's first crab comes: its schedule's start, or its first phase's (see crabs in levels.js)
+function firstCrabTime(crabs) {
+  if (!crabs) return 0;
+  return crabs.phases ? crabs.phases[0].start : crabs.start;
+}
+
+// The crab schedule in effect now ({ interval, max, coopMax }): the level's single schedule, or the last of its
+// phases to have started by the current level time
+function currentCrabSchedule(crabs) {
+  if (!crabs.phases) return crabs;
+  const { duration } = currentLevel();
+  const elapsed = duration === null ? 0 : duration - timeLeft;
+  let schedule = crabs.phases[0];
+  for (const phase of crabs.phases) {
+    if (elapsed >= phase.start) schedule = phase;
+  }
+  return schedule;
+}
+
+// Spawns a crab at a random free spot, hunting `target` ('players' or 'flower'); returns false if none is free
+function spawnCrab(target) {
   const distance = (object, point) => Math.hypot(object.position.x - point.x, object.position.y - point.y);
   const free = CRAB_SPAWN_POINTS.filter(
     (point) =>
@@ -320,7 +339,7 @@ function spawnCrab() {
   );
   if (free.length === 0) return false;
 
-  const crab = createCrab(free[Math.floor(Math.random() * free.length)]);
+  const crab = createCrab(free[Math.floor(Math.random() * free.length)], { target });
   enemies.push(crab);
   scene.add(crab);
   return true;
@@ -489,7 +508,7 @@ function resetLevel() {
   }
   enemies.length = 0;
   spawnTimer = 0;
-  crabTimer = currentLevel().crabs?.start ?? 0;
+  crabTimer = firstCrabTime(currentLevel().crabs);
   octopusTimer = currentLevel().octopus?.start ?? 0;
   timeLeft = currentLevel().duration ?? 0; // a level with no timer never counts it down
 
@@ -739,13 +758,15 @@ function updateGame(delta) {
     }
   }
 
-  // Crabs follow the level's own schedule (none in the Garden), separate from the bee waves
+  // Crabs follow the level's own schedule (none in the Garden), separate from the bee waves: at most one new crab
+  // per frame, never more than the cap in effect, which is the co-op cap when more than one player is playing
   const { crabs } = level;
   if (crabs) crabTimer -= delta;
   if (crabs && crabTimer <= 0) {
-    const cap = gameMode === 'coop' ? crabs.coopMax : crabs.max;
-    if (enemies.filter(isCrab).length >= cap) crabTimer = crabs.interval;
-    else crabTimer = spawnCrab() ? crabs.interval : CRAB_RETRY_DELAY;
+    const schedule = currentCrabSchedule(crabs);
+    const cap = activePlayers.length > 1 ? schedule.coopMax : schedule.max;
+    if (enemies.filter(isCrab).length >= cap) crabTimer = schedule.interval;
+    else crabTimer = spawnCrab(crabs.target) ? schedule.interval : CRAB_RETRY_DELAY;
   }
 
   // The Ink Octopus follows its own schedule too (only on the Pond)
