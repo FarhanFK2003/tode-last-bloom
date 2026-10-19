@@ -16,7 +16,7 @@ import {
   getLives,
   getMaxLives,
   healTeam,
-  hitTeam,
+  hitPlayer,
   resetLives,
   setMaxLives,
   updateLives,
@@ -65,6 +65,7 @@ import {
   createCrocodileBoss,
   getBossCollider,
   getBossHud,
+  getTouchedPlayers,
   hitBoss,
   resetBoss,
   updateBoss,
@@ -616,22 +617,23 @@ function soundPlayer(slot) {
   return slot === playerTwo ? 2 : 1;
 }
 
-// Costs the team a life (unless invulnerable) and returns the lives left; the sound only plays on a real loss
-function damageTeam() {
+// `player` was hit: costs the team a life (unless that player is invulnerable) and returns the lives left; the
+// sound only plays on a real loss
+function damageTeam(player) {
   const before = getLives();
-  const lives = hitTeam();
+  const lives = hitPlayer(player);
   if (lives < before) playSound('hurt');
   return lives;
 }
 
 // A touch in the boss arena (by Snapjaw, or a player hopping into it). There, the Bloom Shield protects the
 // players instead of the (absent) flower: while it lasts, touches cost nothing. Returns the lives left.
-function damageTeamInArena() {
+function damageTeamInArena(player) {
   if (getShieldTime() > 0) {
     playSound('shieldBlock');
     return getLives();
   }
-  return damageTeam();
+  return damageTeam(player);
 }
 
 // Applies one collected pickup. A petal is only collected while a life is missing, so healTeam succeeds.
@@ -668,7 +670,7 @@ function updateGame(delta) {
     updateBoost(slot.boost, delta);
   }
 
-  // Running into a bee costs a shared life (hitTeam ignores hits during the team's invulnerability window).
+  // Running into a bee costs a shared life (hitPlayer ignores hits during that player's invulnerability window).
   // Players block each other; the map edge blocks them in co-op and on levels with a map edge.
   const bounds = gameMode === 'coop' || level.mapEdge ? MAP_SIZE / 2 : null;
   // In the boss arena, Snapjaw's body joins the enemies the players bump into and attack (see CrocodileBoss.js),
@@ -687,12 +689,12 @@ function updateGame(delta) {
       // Nectar Boost (x1.5) and standing in ink (x0.6) only change hop speed. They are independent and
       // multiply (boost in ink: x0.9), and are worked out fresh every frame, so neither can build up or stick
       playerScale * getBoostMultiplier(slot.boost) * getInkSlow(player),
-      getInvulnerableTime(),
+      getInvulnerableTime(player),
       activeGroups,
       bounds,
     );
     if (player.userData.state.hopStarted) playSound('hop', { player: soundPlayer(slot) });
-    if (touchedEnemy && (level.boss ? damageTeamInArena() : damageTeam()) === 0) return 'caught';
+    if (touchedEnemy && (level.boss ? damageTeamInArena(player) : damageTeam(player)) === 0) return 'caught';
   }
 
   // Each pickup goes to the first player touching it, once, even when both players reach it together
@@ -807,7 +809,7 @@ function updateGame(delta) {
     else result = updateEnemy(enemy, flower, activeGroups, delta, enemies, flyingObstacles, enemyScale);
     if (result === 'warn') playSound('crabClack');
     if (result === 'lob') playSound('inkLob');
-    if (result === 'player' && damageTeam() === 0) return 'caught';
+    if (result === 'player' && damageTeam(enemy.userData.hitPlayer) === 0) return 'caught';
     if (result === 'bite') {
       // The Bloom Shield turns every bite away: no damage and no hit flash
       if (getShieldTime() > 0) {
@@ -819,7 +821,7 @@ function updateGame(delta) {
     }
   }
 
-  // Snapjaw's fight. A touch while it is dangerous costs a shared life (the team's invulnerability stops
+  // Snapjaw's fight. A touch while it is dangerous costs a shared life (each player's own invulnerability stops
   // repeated losses; the Bloom Shield turns it away entirely). Its defeat sequence ending wins the level.
   if (bossBody) {
     for (const event of updateBoss(delta, { players: activeGroups, obstacles: houses, bounds: MAP_SIZE / 2 })) {
@@ -827,7 +829,12 @@ function updateGame(delta) {
       if (event === 'warn') playSound('bossWarn');
       if (event === 'crash') playSound('bossCrash');
       if (event === 'gone') return 'won';
-      if (event === 'hitPlayer' && damageTeamInArena() === 0) return 'caught';
+      // Every player Snapjaw touched takes its own hit (unless that player is invulnerable)
+      if (event === 'hitPlayer') {
+        for (const player of getTouchedPlayers()) {
+          if (damageTeamInArena(player) === 0) return 'caught';
+        }
+      }
     }
   }
 

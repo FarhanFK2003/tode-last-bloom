@@ -286,9 +286,12 @@ function scuttle(crab, delta, { flower, players, enemies, houses, bounds, speedS
   }
   // A player-hunting crab running into a player costs a life, then rests before turning toward its target
   // again. A flower-hunting crab is only stopped by the player, which costs nothing.
-  if (players.some((player) => blocksMove(crab, nextX, nextY, player))) {
+  const hitPlayer = players.find((player) => blocksMove(crab, nextX, nextY, player));
+  if (hitPlayer) {
     stop();
-    return huntsFlower ? null : 'player';
+    if (huntsFlower) return null;
+    state.hitPlayer = hitPlayer; // the player it ran into, so the game knows whose invulnerability to check
+    return 'player';
   }
   // Another enemy in the way: wait this frame, still scuttling
   if (isMoveBlocked(crab, nextX, nextY, enemies)) return null;

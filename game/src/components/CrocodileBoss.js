@@ -110,6 +110,7 @@ let boss = null; // the built crocodile and its effect meshes
 let active = false;
 
 // The fight's state (reset by resetBoss)
+let touchedPlayers = []; // the players of the latest 'hitPlayer' event (see checkContact)
 const fight = {
   phase: 'intro',
   phaseTime: 0, // seconds in the current phase
@@ -577,20 +578,29 @@ function startDizzy(time) {
 }
 
 // A player within its body (the line from tail to snout, BODY_HALF_WIDTH either side) is touched.
-// Several touches in one frame are one event; the team's invulnerability stops repeated losses.
+// Several touches in one frame are one event; the players touched are kept for getTouchedPlayers, and each
+// player's own invulnerability stops repeated losses.
 function checkContact(players, events) {
   if (events.includes('hitPlayer')) return;
   const { x, y } = boss.group.position;
   const dirX = Math.cos(fight.heading);
   const dirY = Math.sin(fight.heading);
-  const touched = players.some((player) => {
+  const touched = players.filter((player) => {
     const relX = player.position.x - x;
     const relY = player.position.y - y;
     const along = Math.max(-SPINE_BACK, Math.min(SPINE_FRONT, relX * dirX + relY * dirY));
     const distance = Math.hypot(relX - dirX * along, relY - dirY * along);
     return distance < BODY_HALF_WIDTH + (player.userData.collisionRadius ?? 0);
   });
-  if (touched) events.push('hitPlayer');
+  if (touched.length > 0) {
+    touchedPlayers = touched;
+    events.push('hitPlayer');
+  }
+}
+
+// The players touched in this frame's 'hitPlayer' event
+export function getTouchedPlayers() {
+  return touchedPlayers;
 }
 
 function setDeathStep(step) {

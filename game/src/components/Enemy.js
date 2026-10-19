@@ -145,7 +145,8 @@ export function updateKnockback(enemy, flower, delta, { players, enemies, houses
   return true;
 }
 
-// Moves the enemy toward the flower. Returns 'player' when its next step runs into any of the players,
+// Moves the enemy toward the flower. Returns 'player' when its next step runs into any of the players (the one
+// it ran into is then in enemy.userData.hitPlayer),
 // 'bite' when it lands a bite on the flower, and null otherwise.
 // speedScale multiplies ENEMY_SPEED as difficulty increases.
 export function updateEnemy(enemy, flower, players, delta, enemies, houses, speedScale) {
@@ -172,9 +173,12 @@ export function updateEnemy(enemy, flower, players, delta, enemies, houses, spee
     const nextY = enemy.position.y + dy;
     if (hitsObstacle(enemy, nextX, nextY, houses)) continue;
 
-    // Running into a player is reported first, so it takes priority over everything else
-    if (players.some((player) => blocksMove(enemy, nextX, nextY, player))) {
+    // Running into a player is reported first, so it takes priority over everything else. The player it ran
+    // into is kept in userData.hitPlayer, so the game knows whose invulnerability to check.
+    const hitPlayer = players.find((player) => blocksMove(enemy, nextX, nextY, player));
+    if (hitPlayer) {
       enemy.userData.biteTimer = 0;
+      enemy.userData.hitPlayer = hitPlayer;
       return 'player';
     }
 
