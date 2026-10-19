@@ -14,7 +14,9 @@ const vertex = new THREE.Vector3();
 
 // Returns the houses array straight away; it's filled once the model has loaded.
 // protectedPoints ({ x, y }) are spots houses must stay clear of, such as the player's start and enemy spawns.
-export function createHouses(mapGroup, mapSize, protectedPoints) {
+// onPlaced (optional) is called once with the placed houses (each with its world footprint) when placement is
+// done, or with no houses if the model fails to load; the Garden uses it to keep its decorations clear of them.
+export function createHouses(mapGroup, mapSize, protectedPoints, onPlaced = () => {}) {
   const houses = [];
 
   new GLTFLoader().load(
@@ -29,9 +31,13 @@ export function createHouses(mapGroup, mapSize, protectedPoints) {
           console.warn(`No free spot found for a house after ${MAX_PLACEMENT_ATTEMPTS} attempts; skipping it`);
         }
       }
+      onPlaced(houses);
     },
     undefined,
-    (error) => console.error(`Failed to load ${MODEL_PATH}`, error),
+    (error) => {
+      console.error(`Failed to load ${MODEL_PATH}`, error);
+      onPlaced(houses);
+    },
   );
 
   return houses;

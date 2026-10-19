@@ -4,6 +4,9 @@ const CREDITS = [
   'Flower Single by Quaternius (CC0) via Poly Pizza',
   'Armabee Evolved by Quaternius (Public Domain) via Poly Pizza',
   'Small House by Jarlan Perez (CC-BY 3.0) via Poly Pizza',
+  'Butterfly by Poly by Google (CC-BY 3.0) via Poly Pizza',
+  'Rabbit by Poly by Google (CC-BY 3.0) via Poly Pizza',
+  'Lighthouse scene by Poly by Google (CC-BY 3.0) via Poly Pizza',
   'Tode the Frog from the JetBrains Academy course "Build a Game with an AI Coding Agent"',
 ];
 

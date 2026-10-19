@@ -385,4 +385,7 @@ Possible edge cases, not observed in testing:
 - Flower Single by Quaternius (CC0) via Poly Pizza: https://poly.pizza/m/GvfHo0roi3
 - Armabee Evolved (`enemy.glb`) by Quaternius (Public Domain) via Poly Pizza: https://poly.pizza/m/GcttdvsqsQ
 - Small House (`small_house.glb`) by Jarlan Perez (CC-BY 3.0) via Poly Pizza: https://poly.pizza/m/053kskrV4U_
+- Butterfly (`Butterfly by Poly by Google - e9NAQQrCbLu.glb`) by Poly by Google (CC-BY 3.0) via Poly Pizza: https://poly.pizza/m/e9NAQQrCbLu
+- Rabbit (`Rabbit by Poly by Google - dyeBDJxhDwP.glb`) by Poly by Google (CC-BY 3.0) via Poly Pizza: https://poly.pizza/m/dyeBDJxhDwP
+- Lighthouse scene (`Lighthouse scene by Poly by Google - 1O6BWfUB6ta.glb`) by Poly by Google (CC-BY 3.0) via Poly Pizza: https://poly.pizza/m/1O6BWfUB6ta
 - Tode the Frog (`tode.glb`) is provided by the JetBrains Academy course.

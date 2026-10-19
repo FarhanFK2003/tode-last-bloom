@@ -1,13 +1,13 @@
 import { createMap } from './Map.js';
-import { createHouses } from './House.js';
 import { createCoast } from './Coast.js';
 import { createPond } from './Pond.js';
+import { createGarden } from './Garden.js';
 
 // What a level can place on and around its ground. Each places its objects under the world group and returns
 // the array of obstacles straight away (houses join it once their model has loaded); every obstacle has a
 // rectangular userData.footprint. Scenery that never blocks (such as the Coast's sea) isn't in the array.
 const FEATURES = {
-  houses: createHouses,
+  garden: createGarden,
   coast: createCoast,
   pond: createPond,
 };

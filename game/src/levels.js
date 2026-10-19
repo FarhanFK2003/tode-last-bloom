@@ -71,8 +71,12 @@ export const LEVELS = [
     background: '#CFE3B5',
     // A gently warm sun and a soft, slightly warm ambient: close to white so Tode, bees and houses keep their colours
     light: { sun: '#FFF0D8', ambient: '#F7F5EC' },
-    features: 'houses',
-    mapEdge: false,
+    // Its houses (the only obstacles), plus scenery: meadow grass tufts and wildflower patches, a meadow backdrop
+    // with distant trees, a bush and grass border, a beehive at each bee corner, butterflies and rabbits
+    // (see Garden.js)
+    features: 'garden',
+    // The map edge keeps Tode on the meadow in single player too, as on the other levels
+    mapEdge: true,
     duration: 120,
     startDifficulty: 0,
     waves: GARDEN_WAVES,
