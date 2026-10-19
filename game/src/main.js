@@ -10,12 +10,15 @@ import {
   updatePlayer,
 } from './components/Player.js';
 import {
+  COOP_MAX_LIVES,
   MAX_LIVES,
   getInvulnerableTime,
   getLives,
+  getMaxLives,
   healTeam,
   hitTeam,
   resetLives,
+  setMaxLives,
   updateLives,
 } from './components/Lives.js';
 import { createEnemy, releaseEnemyAnimation, updateEnemy } from './components/Enemy.js';
@@ -191,6 +194,8 @@ function setGameMode(mode) {
   // Player 2 is only in the scene in co-op, so in single player it is never drawn, collided with or updated
   if (mode === 'coop') scene.add(playerTwo.player);
   else scene.remove(playerTwo.player);
+  // Co-op shares one larger pool of lives; a run starts with the mode's full pool (see startGame)
+  setMaxLives(mode === 'coop' ? COOP_MAX_LIVES : MAX_LIVES);
   setHudMode(mode);
 }
 
@@ -283,7 +288,8 @@ createGameOver({
   onContinue: continueToNextLevel,
   onMainMenu: returnToMenu,
 });
-createHud(MAX_LIVES);
+// Enough life hearts for the larger co-op pool; the HUD only shows as many as the current mode's pool
+createHud(COOP_MAX_LIVES);
 createPauseMenu({ onResume: resume, onRestart: restartLevel, onMainMenu: returnToMenu });
 createMenu({ onPlay: (mode) => startGame(mode) });
 
@@ -555,7 +561,7 @@ function playLevel() {
 // or in the current mode (Play Again after the final victory)
 function startGame(mode = gameMode) {
   setGameMode(mode);
-  checkpoint = { score: 0, lives: MAX_LIVES };
+  checkpoint = { score: 0, lives: getMaxLives() };
   enterLevel(0);
   playLevel();
 }
@@ -595,7 +601,7 @@ function jumpToLevel(index, event) {
 // and the run's progress is cleared
 function returnToMenu() {
   setGameMode('single');
-  checkpoint = { score: 0, lives: MAX_LIVES };
+  checkpoint = { score: 0, lives: getMaxLives() };
   enterLevel(0);
   resetLevel();
   hidePauseMenu();
@@ -696,7 +702,7 @@ function updateGame(delta) {
     flower,
     enemies: touchables,
     camera,
-    canHeal: () => getLives() < MAX_LIVES,
+    canHeal: () => getLives() < getMaxLives(),
     // The boss arena has no flower to shield: there, only Nectar Boost and Petal Burst appear
     allowShield: !level.boss,
   });
@@ -879,6 +885,7 @@ renderer.setAnimationLoop(() => {
     flowerHealth: currentLevel().boss ? null : getFlowerHealth(),
     flowerMaxHealth: FLOWER_MAX_HEALTH,
     lives: getLives(),
+    maxLives: getMaxLives(),
     // No timer or wave on a level without a timer; the boss's health bar instead
     timeLeft: currentLevel().duration === null ? null : timeLeft,
     wave: currentLevel().waves.length > 0 ? getWaveIndex() + 1 : null,

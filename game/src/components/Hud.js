@@ -28,6 +28,7 @@ let pulseRowCount = 1; // how many pulse rows the current mode shows
 const shown = {
   flowerHealth: null,
   lives: null,
+  maxLives: null,
   seconds: null,
   wave: null,
   level: null,
@@ -214,6 +215,7 @@ export function updateHud({
   flowerHealth,
   flowerMaxHealth,
   lives,
+  maxLives,
   timeLeft,
   wave,
   waveCount,
@@ -235,9 +237,14 @@ export function updateHud({
     }
   }
 
-  if (lives !== shown.lives) {
+  if (lives !== shown.lives || maxLives !== shown.maxLives) {
     shown.lives = lives;
-    lifePips.forEach((pip, index) => pip.classList.toggle('filled', index < lives));
+    shown.maxLives = maxLives;
+    // Only the current mode's pool is shown (3 hearts in single player, 6 in co-op)
+    lifePips.forEach((pip, index) => {
+      pip.hidden = index >= maxLives;
+      pip.classList.toggle('filled', index < lives);
+    });
     // A gentle warning tint on the row while the team is down to its last life
     livesRow.classList.toggle('last-life', lives === 1);
   }
